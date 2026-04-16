@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+.expo/
+*.tsbuildinfo
+
+# Environment files — NEVER commit real .env files
+.env
+.env.local
+.env.*.local
+# DO commit .env.example — it shows what vars are needed without exposing values
+
+# Database
+prisma/dev.db
+prisma/dev.db-journal
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/settings.json
+.idea/
+*.swp
+
+# Logs
+*.log
+npm-debug.log*
+
+# Turbo cache
+.turbo/
+
+# iOS / Android builds
+packages/mobile/ios/
+packages/mobile/android/
