@@ -8,8 +8,13 @@ const PORT = process.env.PORT ?? 3000
 
 app.use(express.json())
 
+// Health check — first endpoint, confirms server is alive
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() })
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV ?? 'development',
+  })
 })
 
 app.listen(PORT, () => {
