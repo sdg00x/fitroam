@@ -77,9 +77,16 @@ The backend is organised into four service modules. Each service owns its own ro
 - Checks Redis cache first (TTL: 1 hour, keyed by geohash + radius)
 - On cache miss: calls Google Places API for nearby gyms
 - Enriches results with opening hours, equipment tags (from our own DB where available)
+- Formats pricing display: day pass if known, otherwise monthly with "access for your stay" framing and per-day equivalent
 - Passes raw gym list to the Match Engine
 - Returns scored, ranked list to the client
 - Writes results to Redis cache for subsequent requests
+
+The gym service also manages access passport state via `/api/gyms/:id/access`:
+
+- `POST /api/gyms/:id/access` — creates a `gym_access` record when user taps "I'm going here"
+- `GET /api/gyms/access/history` — returns the user's full access history grouped by city
+- A background job (`src/jobs/reminderJob.ts`) runs daily at 08:00 UTC, queries `gym_access` for rows where `expected_end_date = tomorrow` and `reminder_sent_at IS NULL`, sends push notifications, and marks rows as `reminder_sent`
 
 #### Route service (`/api/routes`)
 

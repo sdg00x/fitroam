@@ -149,6 +149,34 @@ Unique constraint on `(user_id, gym_id)` prevents duplicate saves.
 
 ---
 
+### `gym_access`
+
+The access passport record. Created when a user taps "I'm going here" on a gym card. In v1 this drives the cancellation reminder system. In v2 it becomes the foundation for brokered payment and auto-cancellation.
+
+This is the table that transforms FitRoam from a discovery tool into an access management tool. Every row represents one user's decision to access one gym for a defined period.
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| `id` | `uuid` | PK | |
+| `user_id` | `uuid` | FK → users.id NOT NULL | |
+| `gym_id` | `uuid` | FK → gyms.id NOT NULL | |
+| `city_slug` | `text` | NOT NULL | Denormalised for fast history queries |
+| `access_type` | `text` | NOT NULL | Enum: `day_pass`, `weekly`, `monthly`, `unknown` |
+| `price_paid_pence` | `int` | nullable | What the user paid — null if not tracked in v1 |
+| `activated_at` | `timestamptz` | NOT NULL, default `now()` | When user tapped "I'm going here" |
+| `expected_end_date` | `date` | NOT NULL | User's recorded departure date — drives reminder |
+| `reminder_sent_at` | `timestamptz` | nullable | When the cancellation reminder was sent |
+| `cancelled_at` | `timestamptz` | nullable | If user confirmed cancellation (v2) |
+| `status` | `text` | NOT NULL, default `'active'` | Enum: `active`, `reminder_sent`, `cancelled`, `expired` |
+| `notes` | `text` | nullable | Free text — e.g. "login saved in notes app" |
+| `created_at` | `timestamptz` | NOT NULL, default `now()` | |
+
+**Key behaviour:** A background job runs daily checking for rows where `expected_end_date = tomorrow` and `reminder_sent_at IS NULL`. For each match it sends a push notification and sets `reminder_sent_at`. This is the entire v1 passport mechanism — simple, reliable, high value.
+
+**Why `city_slug` is denormalised here:** The access history screen groups entries by city. Joining through `gyms` on every history query adds unnecessary complexity. Storing `city_slug` directly makes the query a single indexed scan.
+
+---
+
 ## 4. Schema — discovery tables
 
 ### `routes`
@@ -277,6 +305,12 @@ CREATE INDEX idx_price_gym_id       ON price_reports (gym_id);
 CREATE INDEX idx_saved_user_id      ON saved_gyms (user_id);
 CREATE INDEX idx_trips_user_id      ON trips (user_id);
 
+-- Access passport indexes
+-- The reminder job queries by expected_end_date + reminder_sent_at daily — this index is critical
+CREATE INDEX idx_access_reminder    ON gym_access (expected_end_date, reminder_sent_at)
+  WHERE reminder_sent_at IS NULL;
+CREATE INDEX idx_access_user_id     ON gym_access (user_id);
+
 -- Partial index — only active users
 CREATE INDEX idx_users_active       ON users (id) WHERE deleted_at IS NULL;
 ```
@@ -380,6 +414,29 @@ model SavedGym {
 
   @@unique([userId, gymId])
   @@map("saved_gyms")
+}
+
+model GymAccess {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String    @map("user_id") @db.Uuid
+  gymId           String    @map("gym_id") @db.Uuid
+  citySlug        String    @map("city_slug")
+  accessType      String    @map("access_type")
+  pricePaidPence  Int?      @map("price_paid_pence")
+  activatedAt     DateTime  @default(now()) @map("activated_at") @db.Timestamptz
+  expectedEndDate DateTime  @map("expected_end_date") @db.Date
+  reminderSentAt  DateTime? @map("reminder_sent_at") @db.Timestamptz
+  cancelledAt     DateTime? @map("cancelled_at") @db.Timestamptz
+  status          String    @default("active")
+  notes           String?
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id])
+  gym  Gym  @relation(fields: [gymId], references: [id])
+
+  @@index([userId])
+  @@index([expectedEndDate, reminderSentAt])
+  @@map("gym_access")
 }
 
 model Route {
@@ -508,6 +565,7 @@ npx prisma studio
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | April 2026 | [Your Name] | Initial schema — all core, discovery, and trip tables |
+| 1.1 | April 2026 | [Your Name] | Added `gym_access` table for access passport feature; added reminder index; updated Prisma schema |
 
 ---
 

@@ -1,6 +1,6 @@
 # FitRoam — Product Requirements Document
 
-**Version:** 1.0  
+**Version:** 1.1  
 **Status:** Draft  
 **Author:** [Your Name]  
 **Last Updated:** April 2026  
@@ -30,9 +30,9 @@
 
 ## 1. Overview
 
-FitRoam is a mobile application for fitness-active travellers who want to maintain their training routine while moving between cities and countries. It removes the friction of finding, comparing, and choosing gyms, running routes, outdoor training spaces, and local fitness communities — all filtered through the user's personal training profile and travel timeline.
+FitRoam is a mobile application for fitness-active travellers who want to maintain their training routine while moving between cities and countries. It removes the friction of finding, comparing, and accessing gyms, running routes, outdoor training spaces, and local fitness communities — all filtered through the user's personal training profile and travel timeline.
 
-The core insight: **a traveller's fitness needs are not generic**. Someone who trains calisthenics needs rings and bars, not treadmills. Someone on a 3-day layover needs a day pass, not a monthly membership. FitRoam makes the right match automatic.
+The core insight: **a traveller's fitness needs are not generic, and their relationship with a gym should not be either**. Someone who trains calisthenics needs rings and bars, not treadmills. Someone staying four days does not want a monthly commitment they have to remember to cancel. FitRoam makes the right match automatic and manages the access relationship on the user's behalf — so they walk into a gym in any city with nothing to fill in, nothing to cancel, and nothing to think about except training.
 
 ---
 
@@ -41,13 +41,15 @@ The core insight: **a traveller's fitness needs are not generic**. Someone who t
 Fitness-active travellers currently face the following compounding friction points:
 
 - **Discovery is fragmented.** Finding gyms requires Google searches, individual website visits, and manual price comparisons — repeated for every new city.
-- **Day pass pricing is opaque.** Most gyms do not publish day pass or short-stay rates online. Users must call or walk in.
+- **Day pass pricing is opaque.** Most gyms do not publish day pass or short-stay rates online. Users must call or walk in to find out.
+- **Monthly memberships create commitment anxiety.** When day passes are unavailable, the only option is a monthly membership. Users either avoid gyms entirely or sign up and forget to cancel — paying for access they no longer use.
+- **Every gym requires starting from scratch.** A new city means a new form, new payment details, a new front-desk conversation. There is no portable identity that says "this person trains, here is their payment method, let them in."
 - **No training-style filtering exists.** Generic maps show all gyms equally. A powerlifter and a yoga practitioner see the same list with no relevance ranking.
 - **Running routes require separate tools.** Apps like Strava show routes but are not integrated with gym discovery or trip planning. Users must context-switch between apps.
 - **Outdoor and calisthenics spaces are invisible.** Free outdoor training parks, pull-up bars, and open fields are not surfaced by any mainstream fitness app.
 - **Local fitness communities are hard to find.** Meetup groups, run clubs, and workout crews exist in every major city but require separate research to locate.
 
-The cumulative effect is that many travelling athletes either skip training, pay over the odds for convenience, or spend significant time on research that should take minutes.
+The cumulative effect is that many travelling athletes either skip training, pay over the odds for convenience, or spend significant time on research and admin that should take seconds.
 
 ---
 
@@ -88,9 +90,10 @@ The cumulative effect is that many travelling athletes either skip training, pay
 
 The following are explicitly out of scope for v1 and should not be built unless the scope changes through a formal revision:
 
-- **Gym booking or payment processing.** FitRoam surfaces gyms and links out — it does not handle transactions.
+- **In-app payment processing (v1).** FitRoam v1 surfaces gyms, frames pricing clearly, and links out to the gym's own sign-up. Payment processing and access brokering are v2 features once gym partnerships are established. This is deferred, not permanently excluded.
+- **Automated membership cancellation (v1).** V1 sends a cancellation reminder notification before the user's departure. Actual automated cancellation requires gym API integrations and is a v2 feature.
 - **In-app class scheduling.** Class booking is a separate product vertical.
-- **Gym partner dashboards.** A gym management or listing portal is a future B2B product.
+- **Gym partner dashboards.** A gym management or listing portal is a future B2B product, required before v2 payment features can be built.
 - **Nutrition or meal planning.** Not relevant to the core travel fitness problem.
 - **Wearable device integration.** May be added post-v1 based on user demand.
 - **Social features (in-app messaging, friend lists).** Community discovery is in scope; a social network is not.
@@ -131,13 +134,20 @@ User stories follow the format: *As a [persona], I want to [action], so that [ou
 - As a new user, I want to set my training style, budget, and preferred gym features once, so that all future recommendations are automatically personalised.
 - As a new user, I want to see why each question matters during onboarding, so that I understand the value of providing the information.
 
-### Gym discovery
+### Gym discovery and access
 
 - As a travelling user, I want to see a ranked list of gyms near my current location filtered by my training profile, so that I don't have to manually compare irrelevant options.
-- As a travelling user, I want to see day pass, weekly, and short-stay pricing for each gym, so that I can choose based on my actual stay length.
+- As a travelling user, I want monthly pricing shown with a clear "access for your stay" framing, so that I understand exactly what I'm committing to and for how long.
 - As a travelling user, I want to understand how far each gym is in walking and transit time (not just distance), so that I can make a realistic decision.
 - As a travelling user, I want each gym rated for its match to my training style, so that I immediately know which is most relevant to me.
 - As a travelling user, I want to save gyms I like to a favourites list, so that I can return to them on future visits.
+
+### Access passport
+
+- As a travelling user, I want to activate access at a gym in one tap with my payment method already on file, so that I don't fill in forms at every front desk in every city.
+- As a travelling user, I want FitRoam to remind me to cancel my gym membership before I leave a city, so that I never pay for access I'm not using.
+- As a travelling user, I want to see a history of every gym I've accessed through FitRoam, so that I can track my training across cities.
+- As a returning user, I want previously visited gyms in a city to be surfaced first, so that I don't have to rediscover options I already trust.
 
 ### Route planning
 
@@ -211,17 +221,52 @@ The match score (0–100) is calculated as a weighted sum:
 **Data displayed per gym:**
 
 - Name, address, distance (walking and transit minutes)
-- Day pass price, weekly price, monthly price (where available)
+- Monthly price framed as: "£X — full access for your stay, cancel before you leave"
+- Day pass price shown where available; monthly shown as flexible alternative where not
 - Equipment tags (free weights, barbells, cables, etc.)
 - Opening hours and whether currently open
-- Match score percentage and primary match reason ("Matched: free weights + day pass")
+- Match score percentage and primary match reason ("Matched: free weights + calisthenics")
 - User reviews pulled from Google Places
+
+**Pricing display rules:**
+
+Never show a price without context. The following hierarchy applies:
+
+1. If day pass price is known → show it as the primary option
+2. If only monthly is known → show monthly with "access for your stay" framing and estimated per-day cost
+3. If no price is known → show "Contact for pricing" with a direct link to the gym
 
 **Acceptance criteria:**
 - Results load within 3 seconds of location detection
-- Day pass price shown where available in data source
+- Every displayed price has a clear framing of what it provides and for how long
 - Results update immediately when profile is changed
 - Works offline for last-searched location (cached results)
+
+---
+
+### F-02b: Access Passport
+
+**Phase:** Alpha (reminder only) → Beta (full access tracking) | **Priority:** P1
+
+The access passport is the feature that turns FitRoam from a discovery tool into an access management tool. In v1 it is lightweight — a record of activations and a reminder system. In v2 it becomes the foundation for brokered access and eventual auto-cancellation.
+
+**V1 scope (Alpha):**
+
+- User taps "I'm going here" on a gym card — this creates a `gym_access` record with their expected stay dates
+- FitRoam sends a push notification 24 hours before departure: "Leaving Berlin tomorrow — remember to cancel your McFit membership if you signed up"
+- User can view their access history: which gyms they've visited, in which cities, on which dates
+
+**V2 scope (Beta — requires gym partnerships):**
+
+- Payment method stored in FitRoam
+- One-tap access activation with fee shown upfront
+- Auto-cancellation when trip end date is reached (requires gym API or partner agreement)
+- Digital pass / QR code sent to phone for front-desk entry
+
+**Acceptance criteria (v1):**
+- "Going here" action takes one tap from gym card
+- Cancellation reminder fires 24 hours before recorded departure date
+- Access history visible in profile screen, sorted by date
 
 ---
 
@@ -394,11 +439,13 @@ Stable, polished, App Store and Google Play listed.
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|-----------|
-| Day pass pricing data is unavailable for most gyms | High | High | Crowdsourcing layer from day one; label unconfirmed data clearly |
+| Day pass pricing unavailable for most gyms | High | Medium (reduced) | Monthly pricing reframed as flexible access pass — missing day pass data is no longer a blocker, just a hierarchy decision |
+| Users don't cancel monthly memberships after leaving | High | High (trust risk) | Cancellation reminder is a P1 Alpha feature — this is FitRoam's responsibility to solve, not the user's |
 | Google Places API costs exceed budget at scale | Medium | High | Cache aggressively; implement request batching; set hard spend limits |
-| Strava / Komoot route data is sparse for emerging cities | Medium | Medium | Supplement with OpenStreetMap routes; allow user-submitted routes in Beta |
+| Gym partnerships required for v2 access features take time | High | Medium | V1 is valuable without partnerships; partnerships unlock v2, not v1 |
+| Strava / Komoot route data sparse in emerging cities | Medium | Medium | Supplement with OpenStreetMap; allow user-submitted routes in Beta |
 | App Store review rejection due to location permissions | Low | Medium | Follow Apple/Google guidelines exactly; provide clear permission rationale copy |
-| Low retention if users don't travel frequently | Medium | High | Ensure the app is useful even locally (local gym discovery is also a valid use case) |
+| Low retention if users don't travel frequently | Medium | High | Local gym discovery is also a valid use case — position accordingly |
 
 ---
 
@@ -406,13 +453,15 @@ Stable, polished, App Store and Google Play listed.
 
 These questions are unresolved and should be answered before Beta launch.
 
-1. **Day pass pricing strategy:** Should we build a crowdsourcing incentive model (e.g., reward users who contribute verified prices)? Or pursue gym partnerships from the start?
+1. **Cancellation reminder delivery:** Push notification or email? What if the user has notifications disabled? This affects the reliability of the core passport promise.
 
-2. **Monetisation:** What is the business model? Options to evaluate: (a) freemium with premium profile features, (b) affiliate commission from gym day pass bookings, (c) gym partner subscriptions for featured placement. This must be decided before v1.0.
+2. **Monetisation:** What is the business model? Options to evaluate: (a) freemium with premium access passport features, (b) affiliate commission from gym sign-ups via FitRoam links, (c) gym partner subscriptions for featured placement and access integration, (d) FitRoam subscription fee covering access across a partner gym network. Must be decided before v1.0.
 
-3. **Data freshness:** How often do we re-query Google Places for updated gym data? What is the acceptable staleness window?
+3. **Access passport liability:** If FitRoam reminds a user to cancel and they miss the notification and get charged, is that FitRoam's problem? The copy and legal terms need to be clear about what FitRoam does and does not guarantee in v1.
 
-4. **Emerging markets:** Is the initial scope limited to Western Europe and North America where data quality is highest? Or do we launch globally from the start?
+4. **Data freshness:** How often do we re-query Google Places for updated gym data? What is the acceptable staleness window?
+
+5. **Emerging markets:** Is the initial scope limited to Western Europe and North America where data quality is highest? Or do we launch globally from the start?
 
 5. **User-submitted gyms:** Should users be able to add gyms that are not in Google Places? If yes, what is the moderation workflow?
 
@@ -423,6 +472,7 @@ These questions are unresolved and should be answered before Beta launch.
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | April 2026 | [Your Name] | Initial draft |
+| 1.1 | April 2026 | [Your Name] | Access passport framing — monthly pricing reframed as flexible stay access; F-02b added; non-goals updated; risks and open questions revised |
 
 ---
 
