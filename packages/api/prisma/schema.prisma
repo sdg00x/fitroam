@@ -52,6 +52,7 @@ model Gym {
   lng           Float
   openingHours  Json?    @map("opening_hours")
   equipmentTags String[] @default([]) @map("equipment_tags")
+  photoUrls     String[]      @default([]) @map("photo_urls")
   rating        Float?
   ratingCount   Int?     @map("rating_count")
   lastFetchedAt DateTime @default(now()) @map("last_fetched_at") @db.Timestamptz

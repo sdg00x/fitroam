@@ -28,12 +28,22 @@ export interface RawGym {
   address:         string
   lat:             number
   lng:             number
-  distanceMinutes: number   // walking minutes, calculated before scoring
+  distanceMinutes: number
   equipmentTags:   string[]
   rating:          number | null
   openNow:         boolean
   dayPassPence:    number | null
   monthlyPence:    number | null
+  photoUrls?:      string[]        // ← add this
+  reviews?:        GymReview[]     // ← add this
+}
+
+export interface GymReview {
+  author: string
+  rating: number
+  text:   string
+  time:   string
+  avatar: string
 }
 
 export interface ScoredGym extends RawGym {
