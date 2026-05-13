@@ -53,6 +53,7 @@ model Gym {
   openingHours  Json?    @map("opening_hours")
   equipmentTags String[] @default([]) @map("equipment_tags")
   photoUrls     String[]      @default([]) @map("photo_urls")
+  websiteUrl    String?   @map("website_url")
   rating        Float?
   ratingCount   Int?     @map("rating_count")
   lastFetchedAt DateTime @default(now()) @map("last_fetched_at") @db.Timestamptz
@@ -210,3 +211,4 @@ model TripRoute {
 
   @@map("trip_routes")
 }
+

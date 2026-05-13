@@ -53,7 +53,7 @@ export async function fetchNearbyGyms(
 
   // Check cache first
   const cached = await getCachedGyms(lat, lng, radiusMetres)
-  if (cached.length > 0) {
+  if (cached.length >= 10) {
     console.log(`[Places] Cache hit — ${cached.length} gyms from DB`)
     return cached
   }
@@ -321,7 +321,7 @@ async function upsertGyms(places: PlaceResult[]): Promise<void> {
 
     await prisma.gym.upsert({
       where:  { placesId: place.id },
-      update: {
+            update: {
         name:          place.displayName.text,
         address:       place.formattedAddress,
         lat:           place.location.latitude,
@@ -332,20 +332,22 @@ async function upsertGyms(places: PlaceResult[]): Promise<void> {
         openingHours:  gymData,
         equipmentTags,
         photoUrls,
-      },
-      create: {
-        placesId:      place.id,
-        name:          place.displayName.text,
-        address:       place.formattedAddress,
-        lat:           place.location.latitude,
-        lng:           place.location.longitude,
-        rating:        place.rating         ?? null,
-        ratingCount:   place.userRatingCount ?? null,
-        lastFetchedAt: new Date(),
-        openingHours:  gymData,
-        equipmentTags,
-        photoUrls,
-      },
+        websiteUrl:    place.websiteUri ?? null,    // ← add this
+        },
+    create: {
+  placesId:      place.id,
+  name:          place.displayName.text,
+  address:       place.formattedAddress,
+  lat:           place.location.latitude,
+  lng:           place.location.longitude,
+  rating:        place.rating         ?? null,
+  ratingCount:   place.userRatingCount ?? null,
+  lastFetchedAt: new Date(),
+  openingHours:  gymData,
+  equipmentTags,
+  photoUrls,
+  websiteUrl:    place.websiteUri ?? null,    // ← add this
+},
     })
   }
   console.log(`[Places] Upserted ${places.length} gyms with photos and reviews`)
@@ -400,6 +402,7 @@ async function getCachedGyms(
     monthlyPence:    latestPrice?.monthlyPence ?? null,
     photoUrls:       (gym as any).photoUrls   ?? [],
     reviews,
+    websiteUrl:      gym.websiteUrl ?? undefined,
   }
 })
 }
@@ -442,6 +445,7 @@ function placeToRawGym(
     time:   r.relativePublishTimeDescription ?? '',
     avatar: r.authorAttribution.photoUri     ?? '',
   })),
+  websiteUrl:      place.websiteUri,
   }
 }
 

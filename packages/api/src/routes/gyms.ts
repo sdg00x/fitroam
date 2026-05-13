@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express'
+import { prisma } from '../lib/prisma'
 import { scoreGyms, UserProfile } from '../services/matchEngine'
 import { fetchNearbyGyms } from '../services/placesService'
 
@@ -30,7 +31,6 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     const rawGyms = await fetchNearbyGyms(lat, lng, radius)
     let   scored  = scoreGyms(profile, rawGyms)
 
-    // Apply sort
     switch (sort) {
       case 'nearest':
         scored = scored.sort((a, b) => a.distanceMinutes - b.distanceMinutes)
@@ -47,16 +47,79 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
         break
       case 'match':
       default:
-        // already sorted by match score from scoreGyms
         break
     }
 
     res.json({
-      gyms:   scored,
-      total:  scored.length,
+      gyms:     scored,
+      total:    scored.length,
       location: { lat, lng },
       radius,
       sort,
+    })
+  } catch (err) {
+    next(err)
+  }
+})
+
+router.post('/:id/access', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const gymId  = req.params.id
+    const userId = req.header('x-user-id')
+
+    if (!userId) {
+      res.status(401).json({ error: 'Missing x-user-id header' })
+      return
+    }
+
+    const { accessType, citySlug, expectedEndDate } = req.body as {
+      accessType:      'day_pass' | 'monthly'
+      citySlug?:       string
+      expectedEndDate: string
+    }
+
+    if (!accessType || !expectedEndDate) {
+      res.status(400).json({ error: 'Missing required fields: accessType, expectedEndDate' })
+      return
+    }
+
+    const gym = await prisma.gym.findUnique({ where: { id: gymId } })
+    if (!gym) {
+      res.status(404).json({ error: 'Gym not found' })
+      return
+    }
+
+    // Find or create the placeholder user by clerkId (since we don't have real auth yet)
+    let user = await prisma.user.findUnique({ where: { clerkId: userId } })
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          clerkId: userId,
+          email:   `${userId}@placeholder.local`,
+        },
+      })
+    }
+
+    const access = await prisma.gymAccess.create({
+      data: {
+        userId:          user.id,
+        gymId:           gym.id,
+        accessType,
+        citySlug:        citySlug ?? 'unknown',
+        expectedEndDate: new Date(expectedEndDate),
+        status:          'active',
+      },
+    })
+
+    res.status(201).json({
+      access: {
+        id:              access.id,
+        gymId:           access.gymId,
+        accessType:      access.accessType,
+        expectedEndDate: access.expectedEndDate,
+        status:          access.status,
+      },
+      gym: { id: gym.id, name: gym.name },
     })
   } catch (err) {
     next(err)

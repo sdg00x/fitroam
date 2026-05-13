@@ -36,6 +36,7 @@ export interface RawGym {
   monthlyPence:    number | null
   photoUrls?:      string[]        // ← add this
   reviews?:        GymReview[]     // ← add this
+  websiteUrl?:     string   
 }
 
 export interface GymReview {
@@ -77,13 +78,23 @@ const STYLE_EQUIPMENT_MAP: Record<string, string[]> = {
 
 function scoreStyleMatch(profile: UserProfile, gym: RawGym): number {
   const preferred = STYLE_EQUIPMENT_MAP[profile.trainingStyle] ?? []
-  if (preferred.length === 0) return 0.5  // unknown style — neutral score
+  if (preferred.length === 0) return 0.5
 
   const matches = preferred.filter(eq =>
     gym.equipmentTags.some(tag => tag.toLowerCase().includes(eq.toLowerCase()))
   )
 
-  return matches.length / preferred.length
+  const matchRate = matches.length / preferred.length
+
+  // Soft floor: if the gym has ANY general fitness equipment, it's at least
+  // a 0.65 match. Pure perfect matches get 1.0. This prevents perfectly good
+  // commercial gyms from ranking below niche specialist gyms just because
+  // Google Places didn't tag every piece of equipment.
+  if (gym.equipmentTags.length > 0 && matchRate < 0.65) {
+    return 0.65
+  }
+
+  return matchRate
 }
 
 function scorePriceMatch(profile: UserProfile, gym: RawGym): number {
