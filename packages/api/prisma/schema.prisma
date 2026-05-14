@@ -1,0 +1,214 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [uuidOssp(map: "uuid-ossp"), postgis]
+}
+
+model User {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clerkId   String    @unique @map("clerk_id")
+  email     String    @unique
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz
+
+  profile      UserProfile?
+  priceReports PriceReport[]
+  savedGyms    SavedGym[]
+  trips        Trip[]
+  gymAccess    GymAccess[]
+
+  @@map("users")
+}
+
+model UserProfile {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId             String   @unique @map("user_id") @db.Uuid
+  trainingStyle      String   @map("training_style")
+  equipmentNeeds     String[] @map("equipment_needs")
+  budgetRange        String   @map("budget_range")
+  maxDistanceMinutes Int      @default(20) @map("max_distance_minutes")
+  environmentPref    String   @default("both") @map("environment_pref")
+  stayLengthPref     String   @default("flexible") @map("stay_length_pref")
+  themePreference    String   @default("dark") @map("theme_preference")
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+model Gym {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  placesId      String   @unique @map("places_id")
+  name          String
+  address       String
+  lat           Float
+  lng           Float
+  openingHours  Json?    @map("opening_hours")
+  equipmentTags String[] @default([]) @map("equipment_tags")
+  photoUrls     String[]      @default([]) @map("photo_urls")
+  websiteUrl    String?   @map("website_url")
+  rating        Float?
+  ratingCount   Int?     @map("rating_count")
+  lastFetchedAt DateTime @default(now()) @map("last_fetched_at") @db.Timestamptz
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  priceReports PriceReport[]
+  savedBy      SavedGym[]
+  tripGyms     TripGym[]
+  gymAccess    GymAccess[]
+
+  @@map("gyms")
+}
+
+model PriceReport {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gymId        String   @map("gym_id") @db.Uuid
+  reportedBy   String   @map("reported_by") @db.Uuid
+  dayPassPence Int?     @map("day_pass_pence")
+  weeklyPence  Int?     @map("weekly_pence")
+  monthlyPence Int?     @map("monthly_pence")
+  verified     Boolean  @default(false)
+  visitedAt    DateTime @map("visited_at") @db.Date
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  gym          Gym  @relation(fields: [gymId], references: [id])
+  reportedByUser User @relation(fields: [reportedBy], references: [id])
+
+  @@map("price_reports")
+}
+
+model SavedGym {
+  id      String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId  String   @map("user_id") @db.Uuid
+  gymId   String   @map("gym_id") @db.Uuid
+  savedAt DateTime @default(now()) @map("saved_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id])
+  gym  Gym  @relation(fields: [gymId], references: [id])
+
+  @@unique([userId, gymId])
+  @@map("saved_gyms")
+}
+
+model GymAccess {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  gymId          String    @map("gym_id") @db.Uuid
+  citySlug       String    @map("city_slug")
+  accessType     String    @map("access_type")
+  pricePaidPence Int?      @map("price_paid_pence")
+  activatedAt    DateTime  @default(now()) @map("activated_at") @db.Timestamptz
+  expectedEndDate DateTime @map("expected_end_date") @db.Date
+  reminderSentAt DateTime? @map("reminder_sent_at") @db.Timestamptz
+  cancelledAt    DateTime? @map("cancelled_at") @db.Timestamptz
+  status         String    @default("active")
+  notes          String?
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id])
+  gym  Gym  @relation(fields: [gymId], references: [id])
+
+  @@index([userId])
+  @@index([expectedEndDate])
+  @@map("gym_access")
+}
+
+model Route {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  citySlug       String   @map("city_slug")
+  name           String
+  description    String?
+  distanceKm     Float    @map("distance_km")
+  terrainType    String   @map("terrain_type")
+  surfaceType    String   @map("surface_type")
+  safetyRating   String   @map("safety_rating")
+  elevationGainM Int      @default(0) @map("elevation_gain_m")
+  gpxUrl         String?  @map("gpx_url")
+  source         String
+  sourceId       String?  @map("source_id")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  tripRoutes TripRoute[]
+
+  @@map("routes")
+}
+
+model Park {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  osmId         String    @unique @map("osm_id")
+  name          String?
+  lat           Float
+  lng           Float
+  equipmentTags String[]  @default([]) @map("equipment_tags")
+  isFree        Boolean   @default(true) @map("is_free")
+  surface       String?
+  lastVerifiedAt DateTime? @map("last_verified_at") @db.Timestamptz
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("parks")
+}
+
+model CommunityGroup {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  citySlug          String    @map("city_slug")
+  name              String
+  type              String
+  meetupId          String?   @map("meetup_id")
+  externalUrl       String?   @map("external_url")
+  visitorsWelcome   Boolean   @default(false) @map("visitors_welcome")
+  nextEventAt       DateTime? @map("next_event_at") @db.Timestamptz
+  nextEventLocation String?   @map("next_event_location")
+  memberCount       Int?      @map("member_count")
+  cacheExpiresAt    DateTime  @map("cache_expires_at") @db.Timestamptz
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("community_groups")
+}
+
+model Trip {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId             String   @map("user_id") @db.Uuid
+  destinationCity    String   @map("destination_city")
+  citySlug           String   @map("city_slug")
+  destinationCountry String   @map("destination_country")
+  arrivesOn          DateTime @map("arrives_on") @db.Date
+  departsOn          DateTime @map("departs_on") @db.Date
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user       User        @relation(fields: [userId], references: [id])
+  tripGyms   TripGym[]
+  tripRoutes TripRoute[]
+
+  @@map("trips")
+}
+
+model TripGym {
+  id         String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tripId     String @map("trip_id") @db.Uuid
+  gymId      String @map("gym_id") @db.Uuid
+  matchScore Int    @map("match_score")
+
+  trip Trip @relation(fields: [tripId], references: [id])
+  gym  Gym  @relation(fields: [gymId], references: [id])
+
+  @@map("trip_gyms")
+}
+
+model TripRoute {
+  id      String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tripId  String @map("trip_id") @db.Uuid
+  routeId String @map("route_id") @db.Uuid
+
+  trip  Trip  @relation(fields: [tripId], references: [id])
+  route Route @relation(fields: [routeId], references: [id])
+
+  @@map("trip_routes")
+}
+

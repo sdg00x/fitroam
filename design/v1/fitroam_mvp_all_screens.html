@@ -1,0 +1,550 @@
+<style>
+.phone { width: 220px; background: #0a0a0a; border-radius: 28px; padding: 14px 12px; border: 1px solid rgba(255,255,255,0.08); color: #fff; font-family: var(--font-sans); display: inline-block; vertical-align: top; }
+.phone-label { font-size: 11px; color: var(--color-text-tertiary); text-align: center; margin-top: 8px; letter-spacing: 0.5px; text-transform: uppercase; }
+.phone-frame { display: inline-block; margin: 0 8px 24px; }
+.s { color: #c8ff57; }
+.muted { color: rgba(255,255,255,0.5); }
+.eyebrow { font-size: 9px; letter-spacing: 1.2px; color: rgba(255,255,255,0.45); text-transform: uppercase; margin-bottom: 6px; font-weight: 500; }
+.title { font-size: 22px; font-weight: 500; letter-spacing: -0.5px; line-height: 1.1; margin: 0 0 4px; }
+.sub { font-size: 10px; color: rgba(255,255,255,0.55); margin: 0; }
+.card { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 10px; margin-bottom: 8px; }
+.card-green { background: rgba(200,255,87,0.08); border: 1px solid rgba(200,255,87,0.2); border-radius: 10px; padding: 10px; margin-bottom: 8px; }
+.cta { background: #c8ff57; color: #0a0a0a; font-size: 10px; font-weight: 500; padding: 8px 0; border-radius: 8px; text-align: center; letter-spacing: 0.5px; }
+.cta-ghost { background: transparent; border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 10px; font-weight: 500; padding: 8px 0; border-radius: 8px; text-align: center; }
+.chip { display: inline-block; padding: 4px 10px; font-size: 10px; border-radius: 100px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); margin-right: 4px; margin-bottom: 4px; }
+.chip-on { background: rgba(200,255,87,0.1); border: 1px solid #c8ff57; color: #c8ff57; }
+.pill { display: inline-block; padding: 3px 8px; font-size: 9px; border-radius: 100px; background: rgba(200,255,87,0.12); color: #c8ff57; font-weight: 500; letter-spacing: 0.3px; }
+.row { display: flex; justify-content: space-between; align-items: center; }
+.tabbar { display: flex; justify-content: space-around; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.06); margin-top: 12px; }
+.tab { font-size: 8px; letter-spacing: 0.5px; color: rgba(255,255,255,0.45); text-align: center; }
+.tab-on { color: #c8ff57; }
+.tab i { display: block; font-size: 14px; margin-bottom: 3px; }
+.kpi { font-size: 16px; font-weight: 500; color: #c8ff57; }
+.kpi-label { font-size: 8px; color: rgba(255,255,255,0.5); letter-spacing: 0.5px; }
+.statusbar { display: flex; justify-content: space-between; font-size: 9px; color: rgba(255,255,255,0.6); margin-bottom: 8px; }
+.divider { height: 1px; background: rgba(255,255,255,0.05); margin: 8px 0; }
+.iconbtn { width: 24px; height: 24px; border-radius: 50%; background: rgba(255,255,255,0.06); display: inline-flex; align-items: center; justify-content: center; font-size: 11px; }
+.thumb { width: 30px; height: 30px; border-radius: 6px; background: rgba(255,255,255,0.08); display: inline-flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+.leg-strip { border-left: 2px solid #c8ff57; padding-left: 10px; margin-bottom: 10px; }
+.body { font-size: 11px; line-height: 1.4; color: rgba(255,255,255,0.85); }
+.bodysm { font-size: 10px; line-height: 1.4; color: rgba(255,255,255,0.6); }
+.hero-emoji { font-size: 28px; margin-bottom: 6px; }
+h3.section { font-size: 9px; letter-spacing: 1.2px; color: rgba(255,255,255,0.45); text-transform: uppercase; margin: 12px 0 6px; font-weight: 500; }
+.section-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 4px; }
+</style>
+
+<div style="padding: 1rem 0;">
+
+<div style="margin-bottom: 1.5rem;">
+<div class="eyebrow" style="margin-bottom: 0;">Section 1</div>
+<h3 style="margin: 4px 0 12px; font-size: 16px; font-weight: 500;">Onboarding · 6 steps</h3>
+</div>
+
+<div class="section-row">
+
+<div class="phone-frame">
+<div class="phone">
+<div class="statusbar"><span>9:41</span><span>·</span></div>
+<div style="margin: 12px 0 4px;"><span class="iconbtn"><i class="ti ti-chevron-left"></i></span></div>
+<div class="eyebrow">Step 1 of 6</div>
+<div class="title">What do you do?</div>
+<p class="sub">Pick all. Tap your main first.</p>
+<div style="margin-top: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+<div class="card-green" style="margin: 0; padding: 8px;"><i class="ti ti-barbell" style="color:#c8ff57"></i><div class="body" style="margin-top: 4px; color:#c8ff57;">Lift heavy</div><div style="font-size:7px; color:#c8ff57; letter-spacing:0.5px;">PRIMARY</div></div>
+<div class="card" style="margin: 0; padding: 8px;"><i class="ti ti-run"></i><div class="body" style="margin-top: 4px;">Run</div></div>
+<div class="card-green" style="margin: 0; padding: 8px;"><i class="ti ti-stretching" style="color:#c8ff57"></i><div class="body" style="margin-top: 4px; color:#c8ff57;">Calisthenics</div></div>
+<div class="card" style="margin: 0; padding: 8px;"><i class="ti ti-yoga"></i><div class="body" style="margin-top: 4px;">Yoga</div></div>
+<div class="card" style="margin: 0; padding: 8px;"><i class="ti ti-bolt"></i><div class="body" style="margin-top: 4px;">CrossFit</div></div>
+<div class="card" style="margin: 0; padding: 8px;"><i class="ti ti-swimming"></i><div class="body" style="margin-top: 4px;">Swim</div></div>
+</div>
+<div style="margin-top: 12px;" class="cta">Continue</div>
+</div>
+<div class="phone-label">1 · Activities</div>
+</div>
+
+<div class="phone-frame">
+<div class="phone">
+<div class="statusbar"><span>9:41</span><span>·</span></div>
+<div style="margin: 12px 0 4px;"><span class="iconbtn"><i class="ti ti-chevron-left"></i></span></div>
+<div class="eyebrow">Step 6 of 6 · optional</div>
+<div class="title">How do you train?</div>
+<p class="sub">We'll match what gyms you need.</p>
+<div style="margin-top: 14px;">
+<div class="card-green"><div class="body" style="color:#c8ff57;">Push / Pull / Legs</div><div class="bodysm">3-day rotation</div></div>
+<div class="card"><div class="body">Upper / Lower</div><div class="bodysm">4-day split</div></div>
+<div class="card"><div class="body">Full body</div><div class="bodysm">Every session is everything</div></div>
+<div class="card"><div class="body">Body-part split</div><div class="bodysm">Chest day, back day, etc</div></div>
+<div class="card"><div class="body">Following a program</div><div class="bodysm">Stronglifts, 5/3/1, etc</div></div>
+<div class="card"><div class="body">Mix it up freestyle</div></div>
+</div>
+<div style="margin-top: 8px;" class="cta">Continue</div>
+<div style="margin-top: 6px; text-align:center;"><span class="bodysm">Skip · I'll set this later</span></div>
+</div>
+<div class="phone-label">6 · Training pattern (new)</div>
+</div>
+
+</div>
+
+<div style="margin: 2rem 0 1.5rem;">
+<div class="eyebrow" style="margin-bottom: 0;">Section 2 · Main tabs</div>
+<h3 style="margin: 4px 0 12px; font-size: 16px; font-weight: 500;">Home · Explore · Trips · Profile</h3>
+</div>
+
+<div class="section-row">
+
+<div class="phone-frame">
+<div class="phone">
+<div class="statusbar"><span>9:41</span><span>·</span></div>
+<div class="row" style="margin-top: 10px;">
+<div>
+<div class="eyebrow" style="margin-bottom: 0;">Good morning</div>
+<div class="title">Nottingham</div>
+</div>
+<div class="iconbtn" style="background:#c8ff57; color:#0a0a0a;">SD</div>
+</div>
+<div class="card" style="margin-top: 12px; padding: 8px 10px;"><span style="font-size: 14px;">⛅</span> <span class="body">14° · Partly cloudy</span> <span class="pill" style="float:right;">Good for outdoor</span></div>
+
+<h3 class="section">Today's training</h3>
+<div class="card-green" style="padding: 10px;">
+<div class="body" style="color:#c8ff57; font-weight: 500;">Push day</div>
+<div class="bodysm">Chest · shoulders · triceps</div>
+<div class="bodysm" style="margin-top: 4px;">Need: cables, dumbbells, bench</div>
+</div>
+
+<h3 class="section">Next trip</h3>
+<div class="card-green" style="padding: 10px;">
+<div class="pill" style="margin-bottom: 4px;">DEPARTING IN 3 DAYS</div>
+<div class="title" style="font-size: 18px;">Leeds + Manchester</div>
+<div class="bodysm">Thu 24 — Sun 27 April · 4 nights</div>
+<div class="bodysm" style="color:#c8ff57; margin-top: 4px;">Everything's ready ✓</div>
+</div>
+
+<h3 class="section">Today in Nottingham</h3>
+<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px;">
+<div class="card" style="padding: 6px; margin: 0;"><div class="eyebrow" style="font-size:7px; margin-bottom: 2px;">ROUTE</div><div class="body" style="font-size: 10px;">Trent Riverside</div><div class="bodysm" style="font-size: 8px;">6.2km flat</div></div>
+<div class="card" style="padding: 6px; margin: 0;"><div class="eyebrow" style="font-size:7px; margin-bottom: 2px;">PARK</div><div class="body" style="font-size: 10px;">Waterside Bars</div><div class="bodysm" style="font-size: 8px;">8 min · free</div></div>
+<div class="card" style="padding: 6px; margin: 0;"><div class="eyebrow" style="font-size:7px; margin-bottom: 2px;">GYM</div><div class="body" style="font-size: 10px;">PureGym City</div><div class="bodysm" style="font-size: 8px;">94% match</div></div>
+</div>
+
+<div class="tabbar">
+<div class="tab tab-on"><i class="ti ti-home"></i>Home</div>
+<div class="tab"><i class="ti ti-search"></i>Explore</div>
+<div class="tab"><i class="ti ti-map-pin"></i>Trips</div>
+<div class="tab"><i class="ti ti-user"></i>Profile</div>
+</div>
+</div>
+<div class="phone-label">Home tab</div>
+</div>
+
+<div class="phone-frame">
+<div class="phone">
+<div class="statusbar"><span>9:41</span><span>·</span></div>
+<div class="row" style="margin-top: 10px;">
+<div class="title">Explore</div>
+<i class="ti ti-search" style="font-size: 18px;"></i>
+</div>
+
+<div class="card" style="margin-top: 8px; padding: 8px 10px;" id="city-pill">
+<span class="bodysm" style="color: rgba(255,255,255,0.5);"><i class="ti ti-search" style="font-size:11px;"></i> Search gyms, parks, routes...</span>
+<span class="pill" style="float:right;"><i class="ti ti-map-pin" style="font-size:9px;"></i> Nottingham</span>
+</div>
+
+<div style="margin-top: 8px; display: flex; gap: 4px;">
+<div class="chip chip-on"><i class="ti ti-barbell" style="font-size:10px;"></i> Gyms</div>
+<div class="chip"><i class="ti ti-run" style="font-size:10px;"></i> Routes</div>
+<div class="chip"><i class="ti ti-tree" style="font-size:10px;"></i> Parks</div>
+</div>
+
+<div style="margin-top: 6px;">
+<span class="chip chip-on">All</span>
+<span class="chip">Strength</span>
+<span class="chip" style="color:#c8ff57; border-color:#c8ff57; background:rgba(200,255,87,0.05);">Good for today</span>
+</div>
+
+<h3 class="section">Top match</h3>
+<div class="card" style="padding: 10px;">
+<div class="row"><div class="body" style="font-weight: 500;">PureGym Nottingham</div><span class="pill">94% match</span></div>
+<div class="bodysm">12 min · open · 0.9km</div>
+<div style="margin-top: 6px; height: 50px; background: rgba(255,255,255,0.06); border-radius: 6px;"></div>
+<div style="margin-top: 6px;">
+<span class="chip" style="font-size:8px;">FREE WEIGHTS</span>
+<span class="chip" style="font-size:8px;">CABLES</span>
+<span class="chip" style="color:#c8ff57; border-color:rgba(200,255,87,0.3); font-size:8px;">CABLES YOU NEED TODAY</span>
+</div>
+<div class="row" style="margin-top: 8px;"><span class="body" style="font-weight: 500;">£8 day pass</span><span class="pill">I'M GOING</span></div>
+</div>
+
+<div class="tabbar">
+<div class="tab"><i class="ti ti-home"></i>Home</div>
+<div class="tab tab-on"><i class="ti ti-search"></i>Explore</div>
+<div class="tab"><i class="ti ti-map-pin"></i>Trips</div>
+<div class="tab"><i class="ti ti-user"></i>Profile</div>
+</div>
+</div>
+<div class="phone-label">Explore · editable city + sprinkles</div>
+</div>
+
+<div class="phone-frame">
+<div class="phone">
+<div class="statusbar"><span>9:41</span><span>·</span></div>
+<div class="row" style="margin-top: 10px;">
+<div class="title">My trips</div>
+<div class="pill"><i class="ti ti-plus" style="font-size:9px;"></i> Add trip</div>
+</div>
+
+<h3 class="section">Next up</h3>
+<div class="card-green" style="padding: 12px;">
+<div class="pill" style="margin-bottom: 6px;">DEPARTING IN 3 DAYS</div>
+<div class="title" style="font-size: 18px; margin-bottom: 4px;">Leeds + Manchester</div>
+<div class="bodysm">Thu 24 — Sun 27 April</div>
+<div class="bodysm" style="color:#c8ff57; margin-top: 4px;">Everything's ready ✓</div>
+<div class="divider"></div>
+<div class="leg-strip">
+<div class="bodysm" style="color:#c8ff57;">LEG 1 · LEEDS · Thu-Fri</div>
+<div class="body">PureGym Leeds City · £8/day</div>
+</div>
+<div class="leg-strip">
+<div class="bodysm" style="color:#c8ff57;">LEG 2 · MANCHESTER · Sat-Sun</div>
+<div class="body">Reebok Sports Club · £12/day</div>
+</div>
+<div style="margin-top: 8px;" class="cta">OPEN FULL PLAN →</div>
+</div>
+
+<h3 class="section">Upcoming</h3>
+<div class="card"><div class="row"><div><div class="body">Malaga 🇪🇸</div><div class="bodysm">May 3-10 · 7 nights</div></div><span class="pill">Plan now →</span></div></div>
+<div class="card"><div class="row"><div><div class="body">London 🇬🇧</div><div class="bodysm">May 22-24 · 2 nights</div></div><span class="pill">Plan now →</span></div></div>
+
+<h3 class="section">Past</h3>
+<div class="card"><div class="row"><div><div class="body">Berlin 🇩🇪</div><div class="bodysm">Mar 28 — Apr 2</div></div><div class="bodysm">5 sessions · £35</div></div></div>
+
+<div class="tabbar">
+<div class="tab"><i class="ti ti-home"></i>Home</div>
+<div class="tab"><i class="ti ti-search"></i>Explore</div>
+<div class="tab tab-on"><i class="ti ti-map-pin"></i>Trips</div>
+<div class="tab"><i class="ti ti-user"></i>Profile</div>
+</div>
+</div>
+<div class="phone-label">Trips · multi-leg</div>
+</div>
+
+<div class="phone-frame">
+<div class="phone">
+<div class="statusbar"><span>9:41</span><span>·</span></div>
+
+<div style="margin-top: 14px; display: flex; gap: 10px; align-items: center;">
+<div style="width: 50px; height: 50px; border-radius: 50%; background: rgba(200,255,87,0.1); border: 2px solid #c8ff57; display: flex; align-items: center; justify-content: center; color: #c8ff57; font-weight: 500;">SD</div>
+<div>
+<div class="title" style="font-size: 16px;">S. Dakarai</div>
+<div class="bodysm">@sdakarai · Nottingham</div>
+<div class="bodysm">Strength + calisthenics</div>
+</div>
+</div>
+
+<div style="margin-top: 12px; display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 4px;">
+<div class="card" style="padding: 6px; text-align: center; margin: 0;"><div class="kpi">11</div><div class="kpi-label">SESSIONS</div></div>
+<div class="card" style="padding: 6px; text-align: center; margin: 0;"><div class="kpi">6</div><div class="kpi-label">CITIES</div></div>
+<div class="card" style="padding: 6px; text-align: center; margin: 0;"><div class="kpi">£47</div><div class="kpi-label">SAVED</div></div>
+<div class="card" style="padding: 6px; text-align: center; margin: 0;"><div class="kpi">3</div><div class="kpi-label">TRIPS</div></div>
+</div>
+
+<h3 class="section">Training profile</h3>
+<div class="card" style="padding: 10px;">
+<div class="row"><span class="bodysm">Style</span><span class="body">Strength + Cali</span></div>
+<div class="row"><span class="bodysm">Pattern</span><span class="body">Push/Pull/Legs</span></div>
+<div class="row"><span class="bodysm">Budget</span><span class="body">£10-20 / day</span></div>
+<div class="row"><span class="bodysm">Distance</span><span class="body">20 min walk</span></div>
+</div>
+
+<h3 class="section">Fitness passport</h3>
+<div class="card" style="padding: 10px;">
+<div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 4px; text-align: center;">
+<div><div style="font-size: 16px;">🇬🇧</div><div class="bodysm">Nott'm · 4</div></div>
+<div><div style="font-size: 16px;">🇬🇧</div><div class="bodysm">London · 3</div></div>
+<div><div style="font-size: 16px;">🇩🇪</div><div class="bodysm">Berlin · 2</div></div>
+<div><div style="font-size: 16px;">🇳🇱</div><div class="bodysm">AMS · 1</div></div>
+</div>
+</div>
+
+<div class="tabbar">
+<div class="tab"><i class="ti ti-home"></i>Home</div>
+<div class="tab"><i class="ti ti-search"></i>Explore</div>
+<div class="tab"><i class="ti ti-map-pin"></i>Trips</div>
+<div class="tab tab-on"><i class="ti ti-user"></i>Profile</div>
+</div>
+</div>
+<div class="phone-label">Profile · passport</div>
+</div>
+
+</div>
+
+<div style="margin: 2rem 0 1.5rem;">
+<div class="eyebrow" style="margin-bottom: 0;">Section 3 · Flows</div>
+<h3 style="margin: 4px 0 12px; font-size: 16px; font-weight: 500;">Gym detail · Add trip · Trip detail · City switcher</h3>
+</div>
+
+<div class="section-row">
+
+<div class="phone-frame">
+<div class="phone">
+<div class="statusbar"><span>9:41</span><span>·</span></div>
+<div class="row" style="margin-top: 10px;">
+<span class="iconbtn"><i class="ti ti-chevron-left"></i></span>
+<span class="body">Gym details</span>
+<span class="iconbtn" style="color:#c8ff57;"><i class="ti ti-navigation"></i></span>
+</div>
+<div style="margin-top: 10px; height: 90px; background: rgba(255,255,255,0.06); border-radius: 8px; position: relative;">
+<span class="pill" style="position: absolute; top: 6px; right: 6px;">94% match</span>
+</div>
+<div style="margin-top: 10px;">
+<div class="title" style="font-size: 18px;">PureGym Nottingham</div>
+<div class="bodysm">14 Trinity Sq, Nottingham NG1 4AF</div>
+<div style="margin-top: 4px;">★★★★★ <span class="bodysm">4.3 (1,242)</span></div>
+</div>
+
+<div style="margin-top: 8px; display: flex; gap: 4px; flex-wrap: wrap;">
+<span class="chip" style="font-size:8px;">12 min walk</span>
+<span class="chip" style="color:#c8ff57; border-color:#c8ff57; font-size:8px;">Open now</span>
+<span class="chip" style="background:#c8ff57; color:#0a0a0a; font-weight:500; font-size:8px;">Directions</span>
+</div>
+
+<div class="card-green" style="padding: 8px; margin-top: 10px;">
+<div class="bodysm" style="color:#c8ff57;">You trained here Apr 14 · Push day</div>
+</div>
+
+<h3 class="section">Why it matched</h3>
+<div class="card" style="padding: 8px;">
+<div class="bodysm"><i class="ti ti-check" style="color:#c8ff57;"></i> Has cables for today's Push</div>
+<div class="bodysm"><i class="ti ti-check" style="color:#c8ff57;"></i> Within your budget</div>
+<div class="bodysm"><i class="ti ti-check" style="color:#c8ff57;"></i> 12 min walk</div>
+</div>
+
+<div class="cta" style="margin-top: 10px;">I'M GOING HERE</div>
+<div class="bodysm" style="text-align: center; margin-top: 4px;">We'll remind you to cancel before you leave</div>
+
+<div class="tabbar"><div class="tab"><i class="ti ti-home"></i>Home</div><div class="tab tab-on"><i class="ti ti-search"></i>Explore</div><div class="tab"><i class="ti ti-map-pin"></i>Trips</div><div class="tab"><i class="ti ti-user"></i>Profile</div></div>
+</div>
+<div class="phone-label">Gym detail + sprinkles</div>
+</div>
+
+<div class="phone-frame">
+<div class="phone">
+<div class="statusbar"><span>9:41</span><span>·</span></div>
+<div class="row" style="margin-top: 10px;">
+<span class="iconbtn"><i class="ti ti-x"></i></span>
+<span class="body">Plan a trip</span>
+<span class="bodysm" style="color:#c8ff57;">Save</span>
+</div>
+
+<h3 class="section">Trip name</h3>
+<div class="card" style="padding: 10px;"><span class="bodysm">Berlin + Prague</span></div>
+
+<h3 class="section">Legs</h3>
+<div class="card-green" style="padding: 10px;">
+<div class="bodysm" style="color:#c8ff57;">LEG 1</div>
+<div class="row" style="margin-top: 4px;"><div class="body">Berlin 🇩🇪</div><span class="bodysm">May 28-31</span></div>
+<div class="bodysm">3 nights</div>
+</div>
+<div class="card-green" style="padding: 10px;">
+<div class="bodysm" style="color:#c8ff57;">LEG 2</div>
+<div class="row" style="margin-top: 4px;"><div class="body">Prague 🇨🇿</div><span class="bodysm">Jun 1-4</span></div>
+<div class="bodysm">3 nights</div>
+</div>
+
+<div class="cta-ghost" style="margin-top: 6px;"><i class="ti ti-plus"></i> Add another leg</div>
+
+<h3 class="section">Why you're going</h3>
+<div style="display: flex; gap: 4px; flex-wrap: wrap;">
+<span class="chip chip-on">Work</span>
+<span class="chip">Leisure</span>
+<span class="chip">Nomad</span>
+</div>
+
+<div class="cta" style="margin-top: 14px;">CREATE TRIP</div>
+
+<div class="tabbar"><div class="tab"><i class="ti ti-home"></i>Home</div><div class="tab"><i class="ti ti-search"></i>Explore</div><div class="tab tab-on"><i class="ti ti-map-pin"></i>Trips</div><div class="tab"><i class="ti ti-user"></i>Profile</div></div>
+</div>
+<div class="phone-label">Add trip · multi-leg</div>
+</div>
+
+<div class="phone-frame">
+<div class="phone">
+<div class="statusbar"><span>9:41</span><span>·</span></div>
+<div class="row" style="margin-top: 10px;">
+<span class="iconbtn"><i class="ti ti-chevron-left"></i></span>
+<span class="body">Berlin + Prague</span>
+<span class="iconbtn"><i class="ti ti-dots"></i></span>
+</div>
+
+<div class="card-green" style="padding: 10px; margin-top: 8px;">
+<div class="pill" style="margin-bottom: 4px;">IN 14 DAYS</div>
+<div class="title" style="font-size: 16px;">May 28 — Jun 4 · 7 nights</div>
+<div class="bodysm" style="color:#c8ff57;">Plan progress: 2 of 2 legs ready</div>
+</div>
+
+<div class="leg-strip" style="margin-top: 12px;">
+<div class="bodysm" style="color:#c8ff57;">LEG 1 · BERLIN · MAY 28-31</div>
+<div class="card" style="padding: 8px; margin-top: 4px;"><div class="row"><div><div class="body">Urban Sports Mitte</div><div class="bodysm">91% · 8 min · £15/day</div></div><span class="pill">Saved</span></div></div>
+<div class="card" style="padding: 8px;"><div class="row"><div><div class="body">JOHN Reed Berlin</div><div class="bodysm">87% · 12 min · £18/day</div></div><span class="bodysm">Tap to save</span></div></div>
+<div class="cta-ghost" style="font-size: 9px; padding: 6px;">+ Find more in Berlin</div>
+</div>
+
+<div class="leg-strip">
+<div class="bodysm" style="color:#c8ff57;">LEG 2 · PRAGUE · JUN 1-4</div>
+<div class="card" style="padding: 8px; margin-top: 4px;"><div class="row"><div><div class="body">Form Factory Florenc</div><div class="bodysm">89% · 15 min · £12/day</div></div><span class="pill">Saved</span></div></div>
+<div class="cta-ghost" style="font-size: 9px; padding: 6px;">+ Find more in Prague</div>
+</div>
+
+<div class="card" style="margin-top: 10px; padding: 10px;">
+<div class="row"><span class="bodysm">Estimated spend</span><span class="body" style="color:#c8ff57;">£72</span></div>
+<div class="bodysm">Save £18 if you go monthly at Urban Sports</div>
+</div>
+
+<div class="tabbar"><div class="tab"><i class="ti ti-home"></i>Home</div><div class="tab"><i class="ti ti-search"></i>Explore</div><div class="tab tab-on"><i class="ti ti-map-pin"></i>Trips</div><div class="tab"><i class="ti ti-user"></i>Profile</div></div>
+</div>
+<div class="phone-label">Trip detail · legs + gyms</div>
+</div>
+
+<div class="phone-frame">
+<div class="phone">
+<div class="statusbar"><span>9:41</span><span>·</span></div>
+<div class="row" style="margin-top: 10px;">
+<span class="body" style="color:#c8ff57;">Cancel</span>
+<span class="body">Choose location</span>
+<span></span>
+</div>
+
+<div class="card" style="margin-top: 12px; padding: 10px;">
+<div class="bodysm"><i class="ti ti-search"></i> Search any city...</div>
+</div>
+
+<h3 class="section">Quick</h3>
+<div class="card" style="padding: 10px;">
+<div class="row"><div><i class="ti ti-map-pin" style="color:#c8ff57;"></i> <span class="body">Use current location</span></div><span class="bodysm">Nottingham</span></div>
+</div>
+
+<h3 class="section">Your trips</h3>
+<div class="card" style="padding: 8px;"><div class="row"><div><div class="body">Berlin 🇩🇪</div><div class="bodysm">In 14 days</div></div><i class="ti ti-chevron-right"></i></div></div>
+<div class="card" style="padding: 8px;"><div class="row"><div><div class="body">Prague 🇨🇿</div><div class="bodysm">In 17 days</div></div><i class="ti ti-chevron-right"></i></div></div>
+<div class="card" style="padding: 8px;"><div class="row"><div><div class="body">Malaga 🇪🇸</div><div class="bodysm">Not yet planned</div></div><i class="ti ti-chevron-right"></i></div></div>
+
+<h3 class="section">Recent</h3>
+<div class="card" style="padding: 8px;"><div class="row"><div class="body">London 🇬🇧</div><i class="ti ti-chevron-right"></i></div></div>
+<div class="card" style="padding: 8px;"><div class="row"><div class="body">Tokyo 🇯🇵</div><i class="ti ti-chevron-right"></i></div></div>
+
+<h3 class="section">Browse</h3>
+<div style="display: flex; gap: 4px; flex-wrap: wrap;">
+<span class="chip">Europe</span>
+<span class="chip">Americas</span>
+<span class="chip">Asia</span>
+</div>
+</div>
+<div class="phone-label">City switcher · sheet</div>
+</div>
+
+</div>
+
+<div style="margin: 2rem 0 1.5rem;">
+<div class="eyebrow" style="margin-bottom: 0;">Section 4 · Supporting</div>
+<h3 style="margin: 4px 0 12px; font-size: 16px; font-weight: 500;">Plan your access · Trip planning context</h3>
+</div>
+
+<div class="section-row">
+
+<div class="phone-frame">
+<div class="phone">
+<div class="statusbar"><span>9:41</span><span>·</span></div>
+<div class="row" style="margin-top: 10px;">
+<span></span>
+<span class="body">Plan your access</span>
+<span class="iconbtn"><i class="ti ti-x"></i></span>
+</div>
+
+<div class="bodysm" style="margin-top: 14px;">How many days at PureGym Nottingham?</div>
+
+<div class="card" style="margin-top: 10px; padding: 14px;">
+<div class="eyebrow">Duration</div>
+<div class="row" style="margin-top: 8px;">
+<div class="iconbtn" style="background: rgba(255,255,255,0.06);"><i class="ti ti-minus"></i></div>
+<div style="text-align: center;"><div style="font-size: 32px; font-weight: 500;">7</div><div class="bodysm">days</div></div>
+<div class="iconbtn" style="background:#c8ff57; color:#0a0a0a;"><i class="ti ti-plus"></i></div>
+</div>
+<div style="margin-top: 10px; display: flex; gap: 4px; justify-content: space-between;">
+<span class="chip" style="font-size:9px;">1d</span>
+<span class="chip" style="font-size:9px;">3d</span>
+<span class="chip chip-on" style="font-size:9px;">7d</span>
+<span class="chip" style="font-size:9px;">14d</span>
+<span class="chip" style="font-size:9px;">30d</span>
+</div>
+</div>
+
+<div class="card-green" style="padding: 10px; margin-top: 10px;">
+<span class="pill">SAVE 47%</span>
+<div class="body" style="color:#c8ff57; margin-top: 4px;">Monthly saves you £26</div>
+<div class="bodysm">7 day passes £56 vs monthly £30</div>
+</div>
+
+<div class="card" style="padding: 10px; margin-top: 8px;">
+<div class="eyebrow">You're going with</div>
+<div class="body">Monthly · £30</div>
+<div class="bodysm">We'll remind to cancel on day 7</div>
+</div>
+
+<div class="cta" style="margin-top: 12px;">CONFIRM — I'M GOING</div>
+</div>
+<div class="phone-label">Plan your access · modal</div>
+</div>
+
+<div class="phone-frame">
+<div class="phone">
+<div class="statusbar"><span>9:41</span><span>·</span></div>
+<div class="row" style="margin-top: 10px;">
+<span class="iconbtn"><i class="ti ti-chevron-left"></i></span>
+<span class="body">Explore</span>
+<span></span>
+</div>
+
+<div class="card-green" style="margin-top: 8px; padding: 8px 10px;">
+<span class="bodysm" style="color:#c8ff57;"><i class="ti ti-map-pin" style="font-size:11px;"></i> PLANNING MODE</span>
+<div class="body">Berlin · Leg 1 of Berlin + Prague trip</div>
+<div class="bodysm">May 28-31 · 3 nights</div>
+</div>
+
+<div style="margin-top: 8px;">
+<span class="chip chip-on">Gyms</span>
+<span class="chip">Routes</span>
+<span class="chip">Parks</span>
+</div>
+
+<div style="margin-top: 6px;">
+<span class="chip chip-on">Best match</span>
+<span class="chip">Near hotel</span>
+<span class="chip" style="color:#c8ff57; border-color:#c8ff57; background:rgba(200,255,87,0.05);">Good for your split</span>
+</div>
+
+<h3 class="section">Recommended for 3 nights</h3>
+<div class="card" style="padding: 10px;">
+<div class="row"><div class="body" style="font-weight: 500;">Urban Sports Mitte</div><span class="pill">91% match</span></div>
+<div class="bodysm">8 min · €15/day · €45 total</div>
+<div style="margin-top: 4px;">
+<span class="chip" style="font-size:8px;">FREE WEIGHTS</span>
+<span class="chip" style="font-size:8px;">CABLES</span>
+<span class="chip" style="color:#c8ff57; border-color:rgba(200,255,87,0.3); font-size:8px;">FITS YOUR PUSH/PULL/LEGS</span>
+</div>
+<div class="row" style="margin-top: 6px;"><span class="bodysm">Day passes total</span><span class="body">€45</span></div>
+<div class="row"><span class="bodysm">Monthly</span><span class="body" style="color:#c8ff57;">€39 (saves €6)</span></div>
+<div class="cta" style="margin-top: 8px; font-size: 10px;">SAVE TO TRIP</div>
+</div>
+
+<div class="card" style="padding: 8px;">
+<div class="row"><div class="body">JOHN Reed Berlin</div><span class="pill">87%</span></div>
+<div class="bodysm">12 min · €18/day</div>
+</div>
+
+<div class="tabbar"><div class="tab"><i class="ti ti-home"></i>Home</div><div class="tab tab-on"><i class="ti ti-search"></i>Explore</div><div class="tab"><i class="ti ti-map-pin"></i>Trips</div><div class="tab"><i class="ti ti-user"></i>Profile</div></div>
+</div>
+<div class="phone-label">Explore in planning mode</div>
+</div>
+
+</div>
+
+</div>

@@ -1,429 +1,470 @@
 # FitRoam — Product Requirements Document
-
-**Version:** 1.0  
-**Status:** Draft  
-**Author:** [Your Name]  
+**Version:** 3.0  
+**Status:** Active  
 **Last Updated:** April 2026  
-**Repository:** `fitroam/`
+**Repos:** `fitroam/` (backend) · `fitroam-mobile/` (mobile)
 
 ---
 
-## Table of Contents
+## The product in one sentence
 
-1. [Overview](#1-overview)
-2. [Problem Statement](#2-problem-statement)
-3. [Target Users](#3-target-users)
-4. [Goals and Success Metrics](#4-goals-and-success-metrics)
-5. [Non-Goals](#5-non-goals)
-6. [User Personas](#6-user-personas)
-7. [User Stories](#7-user-stories)
-8. [Feature Requirements](#8-feature-requirements)
-9. [External API Dependencies](#9-external-api-dependencies)
-10. [Technical Constraints](#10-technical-constraints)
-11. [Design Principles](#11-design-principles)
-12. [Release Phases](#12-release-phases)
-13. [Risks and Mitigations](#13-risks-and-mitigations)
-14. [Open Questions](#14-open-questions)
-15. [Revision History](#15-revision-history)
+**FitRoam finds you the right place to train anywhere in the world and makes sure you never overpay or get trapped.**
 
 ---
 
-## 1. Overview
+## The problem
 
-FitRoam is a mobile application for fitness-active travellers who want to maintain their training routine while moving between cities and countries. It removes the friction of finding, comparing, and choosing gyms, running routes, outdoor training spaces, and local fitness communities — all filtered through the user's personal training profile and travel timeline.
+Getting into a gym in an unfamiliar place is surprisingly hard. Every time you arrive somewhere new and want to train, you lose 30–60 minutes Googling gyms, calling to ask about day passes, filling in forms at reception, and handing over your card details to yet another gym. Then you forget to cancel and pay for a month you didn't use.
 
-The core insight: **a traveller's fitness needs are not generic**. Someone who trains calisthenics needs rings and bars, not treadmills. Someone on a 3-day layover needs a day pass, not a monthly membership. FitRoam makes the right match automatic.
+The problem isn't finding a gym. Google Maps can find a gym. The problem is everything between finding it and being inside it — and everything between signing up and cleanly leaving.
 
----
+**Three scenarios. One solution.**
 
-## 2. Problem Statement
+- You're in Leeds for 4 days and want to keep training
+- You're in Malaga for a week, don't speak Spanish, and want a gym near your hotel
+- You're at home in Nottingham and want to try a different gym without committing
 
-Fitness-active travellers currently face the following compounding friction points:
-
-- **Discovery is fragmented.** Finding gyms requires Google searches, individual website visits, and manual price comparisons — repeated for every new city.
-- **Day pass pricing is opaque.** Most gyms do not publish day pass or short-stay rates online. Users must call or walk in.
-- **No training-style filtering exists.** Generic maps show all gyms equally. A powerlifter and a yoga practitioner see the same list with no relevance ranking.
-- **Running routes require separate tools.** Apps like Strava show routes but are not integrated with gym discovery or trip planning. Users must context-switch between apps.
-- **Outdoor and calisthenics spaces are invisible.** Free outdoor training parks, pull-up bars, and open fields are not surfaced by any mainstream fitness app.
-- **Local fitness communities are hard to find.** Meetup groups, run clubs, and workout crews exist in every major city but require separate research to locate.
-
-The cumulative effect is that many travelling athletes either skip training, pay over the odds for convenience, or spend significant time on research that should take minutes.
+Same problem. Same product. Same flow.
 
 ---
 
-## 3. Target Users
+## What FitRoam is
 
-**Primary:** Fitness-active solo travellers — digital nomads, business travellers, backpackers, and frequent flyers — who train regularly (3+ times per week) and want to maintain their routine while abroad. They are self-directed, comfortable with mobile apps, and value efficiency.
+A fitness passport app. One profile, everywhere. FitRoam finds gyms, running routes, and calisthenics parks that match how you train. It tells you the smartest way to access them for exactly how long you need, gets you as close to the door as possible, and makes sure you never overpay or forget to cancel.
 
-**Secondary:** Travelling athletes (team sports, martial arts, competitive fitness) who need specialist equipment or coaching access when away from their home gym.
+**What makes it different:**
 
-**Out of scope for v1:** Group travellers, fitness tourism (holidays planned around fitness destinations), gym operators and partners.
-
----
-
-## 4. Goals and Success Metrics
-
-### Product goals
-
-| Goal | Description |
-|------|-------------|
-| Reduce discovery friction | A user should go from landing in a new city to a confirmed gym visit in under 3 minutes |
-| Personalised matching | At least 80% of recommended gyms should be rated as relevant by the user after visiting |
-| Pre-trip planning | Users can research and plan their fitness options before they travel, not only on arrival |
-| Community connection | Users find at least one relevant local fitness group per destination |
-
-### Success metrics (v1 launch targets)
-
-| Metric | Target |
-|--------|--------|
-| Time-to-gym (discovery to decision) | < 3 minutes |
-| Profile completion rate at onboarding | > 70% |
-| Weekly active users / monthly active users (WAU/MAU) | > 40% |
-| Gym match rating (user-rated relevance) | > 4.0 / 5.0 |
-| 30-day retention | > 35% |
+1. **Personalised matching** — not nearest gym, right gym. Matched to training style, budget, equipment needs, and distance tolerance
+2. **Smart pricing** — automatically calculates whether day passes or monthly is cheaper for your specific duration
+3. **Cancellation reminders** — persistent sequence before your access period ends with direct cancel link. Becomes automatic cancellation as gym partnerships develop
+4. **Global from day one** — Google Places and OpenStreetMap mean it works in Malaga, Leeds, Toronto, and Tokyo without a single partnership
+5. **Three daily use cases** — gyms, running routes, outdoor parks. Not just a travel tool — a daily fitness companion
 
 ---
 
-## 5. Non-Goals
+## What FitRoam is not
 
-The following are explicitly out of scope for v1 and should not be built unless the scope changes through a formal revision:
-
-- **Gym booking or payment processing.** FitRoam surfaces gyms and links out — it does not handle transactions.
-- **In-app class scheduling.** Class booking is a separate product vertical.
-- **Gym partner dashboards.** A gym management or listing portal is a future B2B product.
-- **Nutrition or meal planning.** Not relevant to the core travel fitness problem.
-- **Wearable device integration.** May be added post-v1 based on user demand.
-- **Social features (in-app messaging, friend lists).** Community discovery is in scope; a social network is not.
+- Not a gym directory — Google Maps is a gym directory
+- Not a price comparison site — showing prices is not the product
+- Not a social fitness app — community is a feature, not the product
+- Not global with deep coverage from day one — launches in one city deep, expands carefully
+- Not automatic cancellation at launch — starts with persistent reminders, automates progressively
 
 ---
 
-## 6. User Personas
+## Target users
 
-### Persona A — The Digital Nomad (Primary)
+**Primary — the mobile trainer**
 
-**Name:** Adaeze, 29  
-**Situation:** Works remotely as a UX designer. Moves cities every 3–8 weeks. Trains strength + calisthenics 4x per week.  
-**Pain points:** Every city requires 30–60 minutes of gym research. Day passes are often £15–25 at tourist-facing gyms. Can never find outdoor calisthenics parks.  
-**What she needs:** Fast, pre-trip gym shortlist matched to her style and budget. Offline access to routes once downloaded.
+Anyone who trains regularly but not always in the same place:
+- Frequent business and leisure travellers
+- Digital nomads moving cities every few weeks
+- People who have recently moved and haven't committed to a local gym
+- Gym-hoppers who prefer variety over commitment
+- People between memberships
 
-### Persona B — The Business Traveller (Primary)
+**Secondary — the local explorer**
 
-**Name:** Marcus, 36  
-**Situation:** Sales lead at a tech company. Travels 10–15 nights per month. Runs 3x per week and lifts 2x.  
-**Pain points:** Hotels recommend hotel gyms (poor equipment) or expensive nearby gyms. Has no time to research; needs answers immediately.  
-**What he needs:** One-tap gym suggestion on arrival. Running routes pre-planned for the next morning. No commitment pricing.
-
-### Persona C — The Extended Traveller (Secondary)
-
-**Name:** Priya, 24  
-**Situation:** Travelling Southeast Asia for 6 months. Budget-conscious. Trains bodyweight and runs.  
-**Pain points:** Monthly gym memberships are commitment she can't use. Free outdoor alternatives are invisible on maps.  
-**What she needs:** Free and low-cost options surfaced prominently. Calisthenics parks. Community runs she can join without knowing anyone.
+Someone based in one city who wants to try different gyms without signing up to each one individually. Lower urgency than the primary user but higher frequency of use.
 
 ---
 
-## 7. User Stories
+## How it works
 
-User stories follow the format: *As a [persona], I want to [action], so that [outcome].*
+### For the user
 
-### Onboarding
+1. Set up profile once — training style, budget, equipment needs, max distance. Never repeated.
+2. Open FitRoam anywhere. App detects location. Shows three best-matched gyms, nearby parks, and recommended running routes.
+3. Tap a gym. See price, match reasons, photos, reviews, opening hours.
+4. Tap "I'm going here." FitRoam calculates cheapest access for your duration. Deep links to gym sign-up page or provides walk-in guide.
+5. When access period ends — FitRoam reminds you to cancel before it costs another month.
 
-- As a new user, I want to set my training style, budget, and preferred gym features once, so that all future recommendations are automatically personalised.
-- As a new user, I want to see why each question matters during onboarding, so that I understand the value of providing the information.
+**Time from app open to confirmed gym access: under 3 minutes.**
 
-### Gym discovery
+### For the gym (partnership model — future)
 
-- As a travelling user, I want to see a ranked list of gyms near my current location filtered by my training profile, so that I don't have to manually compare irrelevant options.
-- As a travelling user, I want to see day pass, weekly, and short-stay pricing for each gym, so that I can choose based on my actual stay length.
-- As a travelling user, I want to understand how far each gym is in walking and transit time (not just distance), so that I can make a realistic decision.
-- As a travelling user, I want each gym rated for its match to my training style, so that I immediately know which is most relevant to me.
-- As a travelling user, I want to save gyms I like to a favourites list, so that I can return to them on future visits.
-
-### Route planning
-
-- As a travelling user, I want to see curated running routes in my destination city before I arrive, so that I can plan my morning run without researching on the day.
-- As a travelling user, I want routes filtered by distance, terrain type (road, trail, track), and safety profile, so that I find a route that matches my preference.
-- As a travelling user, I want to download routes for offline use, so that I don't need mobile data while running.
-
-### Parks and outdoor spaces
-
-- As a calisthenics trainer, I want to find outdoor bars, rings, and parallettes near me, so that I can train without paying for a gym.
-- As an outdoor fitness enthusiast, I want to find open fields, tracks, and quiet public spaces suitable for training, so that I can exercise in an environment I prefer.
-
-### Community
-
-- As a solo travelling athlete, I want to find local fitness meetups and run clubs in my destination city, so that I can train with people who share my style.
-- As a visitor, I want to filter community groups by "visitors welcome" or "open to drop-ins", so that I don't feel like an outsider joining a tight-knit group.
-
-### Pre-trip planning
-
-- As a user planning an upcoming trip, I want to enter a destination and travel dates and receive a full fitness briefing for that city, so that I arrive prepared.
+Partner gyms receive a commercial relationship with FitRoam. FitRoam agrees a rate for access, pays gyms directly, and handles all user-facing communication. Gyms receive guaranteed revenue from customers they would not otherwise have acquired, with zero admin overhead.
 
 ---
 
-## 8. Feature Requirements
+## Navigation structure
 
-Each feature is tagged with its release phase (see Section 12) and a priority level: **P0** (must ship), **P1** (should ship), **P2** (nice to have).
+**Four tabs:**
 
----
+| Tab | Job | Content |
+|-----|-----|---------|
+| Home | Anticipate | Today's recommendations, next trip, passport status, community events, insights |
+| Explore | Search and discover | Gyms, routes, parks — toggled by content type. Sort by match, nearest, rating, price |
+| Trips | Plan ahead | Upcoming trips with pre-prepared gym, route, park recommendations per destination |
+| Profile | Manage | Training profile, passport history, payment method, settings, following/followers |
 
-### F-01: Fitness Profile
-
-**Phase:** Alpha | **Priority:** P0
-
-The fitness profile is the engine behind all personalisation. It must be completed at onboarding and editable at any time from settings.
-
-**Required profile fields:**
-
-| Field | Options | Purpose |
-|-------|---------|---------|
-| Training style | Strength, calisthenics, cardio, crossfit, yoga/mobility, mixed | Primary filter for gym type matching |
-| Equipment needs | Free weights, barbells, machines, bodyweight only, pool | Secondary filter |
-| Budget (per day) | Under £5, £5–10, £10–20, £20+ | Filters day pass pricing |
-| Acceptable travel distance | 5 min, 10 min, 20 min, 30 min, any | Radius filter for search |
-| Preferred environment | Indoor gym, outdoor only, both | Top-level split |
-| Stay length preference | Day pass, 2–3 day, weekly, flexible | Surfaces correct pricing tier |
-
-**Acceptance criteria:**
-- Profile can be completed in under 2 minutes
-- All recommendations reflect current profile settings immediately on save
-- Profile persists across sessions and devices (cloud-synced)
+**Social feed** — accessed via chat icon top right on Home. Not a bottom tab. Following feed, nearby activity, shared routes and parks. Strava-style following model.
 
 ---
 
-### F-02: Gym Finder
+## Feature requirements
 
-**Phase:** Alpha | **Priority:** P0
+### F-01: User profile — P0 · MVP
 
-The core feature. Surfaces gyms near the user's current or searched location, ranked by a match score derived from their profile.
+Single profile that travels with the user:
+- Training style (strength, calisthenics, cardio, crossfit, yoga, mixed)
+- Equipment preferences (barbells, pull-up bars, cables, etc.)
+- Budget range per day (under £10, £10–20, £20–40, any)
+- Maximum walking distance
+- Saved payment method (Stripe)
 
-**Match score algorithm (v1):**
+Stored locally in AsyncStorage. Syncs to backend on authentication.
 
-The match score (0–100) is calculated as a weighted sum:
+### F-02: Gym matching and discovery — P0 · MVP
 
-| Factor | Weight |
-|--------|--------|
-| Training style alignment | 40% |
-| Pricing within budget | 25% |
-| Distance within tolerance | 20% |
-| Equipment match | 15% |
+**Match score algorithm:**
+- Training style alignment: 40%
+- Price within budget: 25%
+- Distance: 20%
+- Equipment match: 15%
 
-**Data displayed per gym:**
+**Sort options:**
+- Best match (default) — ranked by match score
+- Nearest — ranked by walking distance
+- Top rated — ranked by Google rating
+- Best price — ranked by cheapest access option
 
-- Name, address, distance (walking and transit minutes)
-- Day pass price, weekly price, monthly price (where available)
-- Equipment tags (free weights, barbells, cables, etc.)
-- Opening hours and whether currently open
-- Match score percentage and primary match reason ("Matched: free weights + day pass")
-- User reviews pulled from Google Places
+**Content type toggle in Explore:**
+- Gyms — powered by Google Places API with hotel/spa filtering
+- Routes — powered by OpenStreetMap and Strava
+- Parks — powered by OpenStreetMap outdoor gym nodes
 
-**Acceptance criteria:**
-- Results load within 3 seconds of location detection
-- Day pass price shown where available in data source
-- Results update immediately when profile is changed
-- Works offline for last-searched location (cached results)
+### F-03: Gym detail screen — P0 · MVP (built)
 
----
+- Real photos from Google Places (up to 4)
+- Star rating and review count
+- Opening hours expandable by day — today highlighted
+- Directions button — opens Apple Maps or Google Maps
+- Equipment tags inferred from gym name and type
+- Why it matched — match reasons listed
+- Google reviews (up to 3)
+- Smart pricing modal (see F-04)
+- "I'm going here" CTA
 
-### F-03: Running Route Planner
+### F-04: Smart pricing and access flow — P0 · MVP (built)
 
-**Phase:** Alpha | **Priority:** P1
+Duration dial — 1 to 30 days with quick select (1d, 3d, 7d, 14d, 30d).
 
-Surfaces curated running routes in any city, sourced from Strava Route API and Komoot, with filters matched to user preference.
+Logic:
+- If monthly price < (day pass × days): recommend monthly, show saving percentage and cost comparison
+- If day pass × days < monthly: recommend day passes, confirm total cost
+- If only one option exists: show that option with context
 
-**Route metadata displayed:**
+Access tiers:
+1. Partner gym — instant QR code or digital pass (future, with partnerships)
+2. Online sign-up — deep link to gym website, pre-filled where possible
+3. Walk-in — guide card showing what to say, translatable for foreign countries
 
-- Name and brief description
-- Distance and estimated duration
-- Elevation profile (flat, moderate, hilly)
-- Surface type (road, trail, track, mixed)
-- Safety rating (traffic exposure, lighting)
-- Best time of day (morning, any, avoid at night)
-- Download for offline use
+### F-05: Cancellation reminders — P0 · MVP
 
-**Acceptance criteria:**
-- At least 3 routes available for any city with population > 500,000
-- Routes downloadable before travel (pre-trip mode)
-- Offline maps available after download (no data required while running)
+When user confirms monthly access:
+- Day 27: "Your [Gym] access ends in 3 days — cancel now in 30 seconds" + direct cancel link
+- Day 28: "Today's the day — here's the cancel link"
+- Day 29: "Looks like you're still active — tap to cancel before you're charged again"
 
----
+Implemented via Expo push notifications. Persistent until dismissed or cancelled.
 
-### F-04: Outdoor and Calisthenics Parks
+Becomes automatic cancellation — FitRoam submits cancellation form on user's behalf — as gym partnerships develop.
 
-**Phase:** Alpha | **Priority:** P1
+### F-06: Real location detection — P0 · MVP (built)
 
-Discovers free and low-cost outdoor fitness infrastructure near the user.
+- `expo-location` with foreground permission request
+- Reverse geocode to city name for hero display
+- Graceful fallback to last known location or manual city search if denied
+- Coordinates passed to API for distance calculation and gym search
 
-**Space types surfaced:**
+### F-07: Google Places integration — P0 · MVP (built)
 
-- Calisthenics parks (pull-up bars, dip stations, monkey bars)
-- Outdoor gym installations
-- Athletic tracks (400m running tracks)
-- Open fields suitable for training
-- Beach access points suitable for running or bodyweight training
+- Text search for "gym", "fitness centre", "crossfit box" near user location
+- Filters out hotels, spas, leisure centres with keyword and type matching
+- Fetches full place details including photos, reviews, opening hours
+- 24-hour database cache to minimise API costs
+- Equipment tags inferred from gym name and type
 
-**Data sources:** OpenStreetMap (`leisure=outdoor_gym`, `sport=calisthenics`), Street Workout global map API, Google Places (outdoor gym category).
+### F-08: Running routes — P1 · Post-MVP
 
-**Acceptance criteria:**
-- Spaces shown on map with equipment tags
-- Filter by equipment type (bars, dips, rings, track)
-- "Free only" filter surfaces no-cost options exclusively
+- OpenStreetMap and Strava route data per city
+- Distance, elevation, terrain type
+- Downloadable for offline use
+- User-shareable to social feed
+- Shown in Explore (Routes tab) and Home screen today cards
 
----
+### F-09: Outdoor parks and calisthenics spaces — P1 · Post-MVP
 
-### F-05: Community Discovery
+- OpenStreetMap outdoor gym nodes globally
+- Equipment tags (pull-up bars, dip stations, rings, etc.)
+- Completely free — no partnership required
+- Shown in Explore (Parks tab) and Home screen today cards
+- User-shareable with photo and equipment confirmation
 
-**Phase:** Beta | **Priority:** P1
+### F-10: Home screen — P1 · Post-MVP
 
-Surfaces local fitness groups, run clubs, and workout communities in the destination city.
+- Good morning greeting + city name
+- Weather strip (Open-Meteo API — free, no key)
+- Three today cards: top gym, nearest park, best route
+- Next trip card if trip is planned
+- Upcoming trips horizontal scroll
+- Passport strip — active memberships with days remaining
+- Community events near user
+- Monthly insights: cities, sessions, money saved
 
-**Group metadata displayed:**
+### F-11: Trips planning — P1 · Post-MVP
 
-- Group name, type (run club, calisthenics crew, CrossFit affiliate, etc.)
-- Next scheduled meetup (date, time, location)
-- Attendee count
-- Visitors welcome flag
-- Link to Meetup or Facebook Group page
+- Add trip: destination + dates
+- FitRoam automatically prepares: matched gyms, routes, parks, community events for those dates
+- Trip briefing with tabs: Gyms, Routes, Parks, Events
+- Offline downloadable content
+- Departure countdown on home screen
+- Past trips log with sessions and spend
 
-**Data sources:** Meetup API, manual curation for cities with strong fitness communities but low Meetup usage.
+### F-12: Social feed — P2 · Post-MVP
 
-**Acceptance criteria:**
-- At least 2 relevant groups surfaced per major city
-- "Visitors welcome" filter is accurate and verified
-- Groups sorted by next upcoming event date
+- Accessed via chat icon top right on Home
+- Following and followers — Strava-style model
+- Share routes, parks, gyms with real stats
+- "Save route" / "Save park" — adds directly to user's FitRoam library
+- Tabs: Following, Nearby, Routes, Parks
+- No text posts — only fitness content sharing
+- Activity indicators showing who's trained recently
 
----
+### F-13: Walk-in guide card — P1 · Post-MVP
 
-### F-06: Pre-Trip Planner
+For gyms without online sign-up:
+- Clean card showing user's name, training preference, duration, budget
+- One-sentence access request in local language (Malaga → Spanish, Berlin → German)
+- Directions to gym
+- What to expect at the front desk
 
-**Phase:** Beta | **Priority:** P1
+### F-14: User subscription — P2 · Post-MVP
 
-Allows users to enter an upcoming destination and travel dates and receive a packaged fitness briefing before they travel.
+£6–8/month premium tier:
+- Unlimited access requests
+- Smart pricing on every gym
+- Cancellation management
+- Offline routes and parks
+- Trip planning with full briefing
+- Community features
 
-**Briefing contents:**
-
-- Top 3 matched gyms for the stay length
-- 2 recommended running routes (downloadable)
-- Nearest calisthenics park
-- Upcoming community events during travel window
-
-**Acceptance criteria:**
-- Available for any destination, not only current location
-- Briefing exportable as a saved "trip" accessible offline
-
----
-
-## 9. External API Dependencies
-
-| API | Purpose | Pricing model | Risk |
-|-----|---------|--------------|------|
-| Google Places API | Gym discovery, reviews, opening hours | Pay per request (free tier: $200/month credit) | Day pass pricing not available — requires crowdsourcing layer |
-| Mapbox | Maps, routing, geocoding | Free tier: 50,000 map loads/month | Low |
-| Strava Route API | Running route data | Free for read access | Route data quality varies by city |
-| Komoot API | Running routes (especially trail/outdoor) | Partnership required for commercial use | Requires agreement for v1 |
-| OpenStreetMap / Overpass API | Outdoor gym and calisthenics park data | Free and open | Data quality inconsistent in some regions |
-| Meetup API | Community group discovery | Free tier limited; paid plan for production | Limited coverage outside Western markets |
-
-**Known gap — day pass pricing:** No API currently provides reliable day pass pricing data. This is the most significant data gap in v1. Mitigation strategy: (1) crowdsource from users post-visit, (2) build a gym partner portal in v2 where gyms self-report pricing, (3) display "contact for day pass rate" where data is unavailable.
-
----
-
-## 10. Technical Constraints
-
-- The app must work on iOS 15+ and Android 11+.
-- Core discovery features must function with degraded or no network connectivity (offline-first for cached data).
-- Location permissions are required for core functionality. The app must gracefully handle permission denial with a manual search fallback.
-- All user data storage must comply with GDPR (EU) and UK GDPR. A privacy policy must be published before any public testing.
-- The backend must be designed to scale horizontally — the architecture should not require a full rewrite to go from 100 users to 100,000 users.
-
----
-
-## 11. Design Principles
-
-These principles should be referenced when making product decisions, especially under time pressure or ambiguity.
-
-**1. Speed over completeness.** A fast, relevant shortlist is more valuable than an exhaustive list. Never show more than 5–7 gyms at once. Rank hard, truncate confidently.
-
-**2. Profile-first, location-second.** The match score matters more than distance. A 25-minute gym that perfectly matches the user's training style is a better result than a 5-minute gym with no free weights.
-
-**3. Reduce decisions, don't multiply them.** Every screen should leave the user with fewer decisions to make, not more. Avoid surfacing filters or options the user didn't ask for.
-
-**4. Offline is not a feature, it's a requirement.** Travellers are often without reliable data. Any screen that a user would need while out training must work without connectivity.
-
-**5. Trust through transparency.** If data is uncertain (e.g. day pass price not confirmed), say so clearly. Never display stale or unverified data as if it is confirmed.
+Free tier: 3 access requests/month, basic discovery, no offline content.
 
 ---
 
-## 12. Release Phases
+## Gym partnership model
 
-### Alpha (internal, invite-only — target: Month 4)
+**At launch — no partnerships required**
 
-Build the core loop. Enough to validate the main hypothesis: that profile-based matching meaningfully reduces gym discovery time.
+Google Places provides global gym data. Users access gyms through the gym's own website or walk-in process. FitRoam gets them there faster and smarter.
 
-- F-01: Fitness Profile
-- F-02: Gym Finder (basic match score, Google Places data)
-- F-03: Running Route Planner (read-only, no offline)
-- F-04: Outdoor Parks (basic map view)
+**Partnership model (Phase 2)**
 
-**Success gate:** 10 real travellers use it in a real city. At least 7 rate gym suggestions as relevant.
+Gyms receive:
+- New revenue from customers they wouldn't acquire otherwise
+- Zero admin — FitRoam handles all user communication
+- Guaranteed payment on regular billing cycle
+- Featured placement and priority in matching algorithm
+- Customer analytics dashboard
 
-### Beta (closed beta — target: Month 7)
+FitRoam receives:
+- Agreed access rate (day pass, weekly, or monthly block)
+- Right to issue FitRoam digital passes for entry
+- Right to cancel memberships on user's behalf
 
-Add depth and community features. Validate retention.
-
-- F-05: Community Discovery
-- F-06: Pre-Trip Planner
-- Offline route downloads
-- Profile-to-result feedback loop (user rates gym visit, score improves)
-- Crowdsourced day pass price contributions
-
-**Success gate:** 100 MAU, 40% WAU/MAU, NPS > 30.
-
-### v1.0 Public Launch (target: Month 10)
-
-Stable, polished, App Store and Google Play listed.
-
-- All features from Alpha and Beta
-- Onboarding redesign based on Beta feedback
-- Partner gym data (direct integrations for day pass booking links)
-- Marketing site live
+**Partnership acquisition sequence:**
+1. Independent gyms in Nottingham — owners accessible, decisions made on the spot
+2. Independent gyms in second UK city — use Nottingham case study
+3. Regional gym chains — use user data as leverage
+4. National chains (PureGym, JD Gyms, The Gym Group) — requires user base to negotiate
 
 ---
 
-## 13. Risks and Mitigations
+## Monetisation sequence
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|-----------|--------|-----------|
-| Day pass pricing data is unavailable for most gyms | High | High | Crowdsourcing layer from day one; label unconfirmed data clearly |
-| Google Places API costs exceed budget at scale | Medium | High | Cache aggressively; implement request batching; set hard spend limits |
-| Strava / Komoot route data is sparse for emerging cities | Medium | Medium | Supplement with OpenStreetMap routes; allow user-submitted routes in Beta |
-| App Store review rejection due to location permissions | Low | Medium | Follow Apple/Google guidelines exactly; provide clear permission rationale copy |
-| Low retention if users don't travel frequently | Medium | High | Ensure the app is useful even locally (local gym discovery is also a valid use case) |
-
----
-
-## 14. Open Questions
-
-These questions are unresolved and should be answered before Beta launch.
-
-1. **Day pass pricing strategy:** Should we build a crowdsourcing incentive model (e.g., reward users who contribute verified prices)? Or pursue gym partnerships from the start?
-
-2. **Monetisation:** What is the business model? Options to evaluate: (a) freemium with premium profile features, (b) affiliate commission from gym day pass bookings, (c) gym partner subscriptions for featured placement. This must be decided before v1.0.
-
-3. **Data freshness:** How often do we re-query Google Places for updated gym data? What is the acceptable staleness window?
-
-4. **Emerging markets:** Is the initial scope limited to Western Europe and North America where data quality is highest? Or do we launch globally from the start?
-
-5. **User-submitted gyms:** Should users be able to add gyms that are not in Google Places? If yes, what is the moderation workflow?
+| Stage | Model | When |
+|-------|-------|------|
+| Launch | £1–2 transaction fee per access | MVP |
+| Traction | £6–8/month user subscription | 500 MAU |
+| Scale | £150–300/month gym SaaS | 5,000 MAU + 50 gym partners |
+| Global | Corporate wellness, hotel white label | Series A |
 
 ---
 
-## 15. Revision History
+## Technical stack
 
-| Version | Date | Author | Changes |
-|---------|------|--------|---------|
-| 1.0 | April 2026 | [Your Name] | Initial draft |
+**Backend**
+- Node.js + Express + TypeScript
+- PostgreSQL + PostGIS on Supabase
+- Prisma ORM
+- Google Places API (New) — gym discovery
+- OpenStreetMap Overpass API — parks and routes
+- Stripe — payment processing
+- Clerk — authentication
+
+**Mobile**
+- React Native + Expo
+- expo-router — file-based navigation
+- expo-location — GPS detection
+- react-native-safe-area-context
+- @expo/vector-icons
+- TypeScript
+
+**External APIs**
+- Google Places — gym data, photos, reviews, opening hours
+- Open-Meteo — weather (free, no key)
+- OpenStreetMap Overpass — parks and routes (free)
+- Strava — curated running routes
+- Mapbox — maps and directions
 
 ---
 
-*This document lives at `docs/PRD.md` in the FitRoam repository. Any change to product scope must be reflected here with a version bump and revision entry. Features built without a corresponding PRD entry should be treated as undocumented behaviour.*
+## Design system
+
+**Dark mode (primary)**
+- Background: #0e0e0e
+- Surface: #161616
+- Accent: #c8ff57 (acid green)
+- Text primary: #ffffff
+- Hero: #0e0e0e
+
+**Light mode**
+- Background: #ffffff
+- Surface: #f8f8f8
+- Accent: #c8ff57 (same acid green)
+- Hero: #1a1a1a (dark, white text)
+- Text primary: #1a1a1a
+
+**Typography:** DM Sans — heavy weights (800), tight letter spacing on headings  
+**Tab bar:** Theme-aware — dark on dark mode, white on light mode  
+**Icons:** Ionicons via @expo/vector-icons
+
+---
+
+## Design principles
+
+1. **Three, not thirty** — show three gyms, rank hard, the top match is the answer
+2. **Speed over completeness** — under 3 minutes from app open to confirmed access
+3. **Invisible administration** — every piece of gym admin happens without the user knowing
+4. **Honest when it can't deliver** — never pretend to offer instant access when the process is manual
+5. **Offline when it matters** — downloaded routes and saved gyms work without connectivity
+
+---
+
+## MVP scope — 2 weeks
+
+**In:**
+- Google Places live gym data ✓ (built)
+- Sort filters: match, nearest, rating, price ✓ (built)
+- Real gym photos from Places API (in progress)
+- Profile screen — training style, budget, distance, equipment
+- Home screen — lightweight version
+- Routes tab — OpenStreetMap real data
+- Parks tab — OpenStreetMap real data
+- Cancellation reminder — push notification sequence
+- Basic 3-screen onboarding
+- TestFlight build
+
+**Out:**
+- Social feed
+- Full trips planning
+- Walk-in guide card
+- Deep link pre-fill
+- Community events
+- Automatic cancellation
+- Payment storage
+- Passport history display
+- Insights dashboard
+
+---
+
+## Release phases
+
+### Phase 0 — Now (2 weeks)
+TestFlight with 50 invite-only users. Prove the core loop works.
+
+**Gate:** 50 users · 40% return within 7 days · NPS 40+
+
+### Phase 1 — Months 2–6
+App Store launch. First revenue. 5–10 gym partnerships in 2 UK cities.
+
+**Gate:** 500 MAU · £2K monthly revenue · 10 gym partners
+
+### Phase 2 — Months 6–18
+Product market fit. Seed raise. Toronto pilot. Full social and trips features.
+
+**Gate:** 5,000 MAU · £25K monthly revenue · seed raised · Toronto live
+
+### Phase 3 — Years 2–3
+Scale. Series A. NYC launch. 20 cities across 3 countries.
+
+**Gate:** 50,000 MAU · £240K monthly revenue · Series A raised
+
+### Phase 4 — Years 3–5
+Global. Series B. US full rollout. Southeast Asia.
+
+**Gate:** 300,000 MAU · £1.5M monthly revenue · Series B raised
+
+### Phase 5 — Years 5–8
+Infrastructure. 1M+ MAU. IPO or acquisition. £150M–£500M valuation.
+
+---
+
+## Geography and expansion
+
+| Market | Entry | First city | Why |
+|--------|-------|------------|-----|
+| UK | Now | Nottingham | Home market, accessible independent gyms |
+| Canada | Year 2 | Toronto | English-speaking, similar to UK, less competitive than US |
+| US | Year 2–3 | New York | Largest market, most acute cancellation pain, 17M digital nomads |
+| Europe | Year 2–3 | Amsterdam, Berlin | High travel frequency, cross-border culture |
+| Southeast Asia | Year 4+ | Singapore | Fastest growing fitness market, digital nomad hub |
+
+**US requirements before entry:**
+- Delaware C-Corp established
+- UK + Canada proof of concept
+- 10 NYC gym partnerships pre-signed
+- US-based gym partnership hire
+- Series A capital with US expansion budget
+
+---
+
+## Risks and mitigations
+
+| Risk | Severity | Mitigation |
+|------|----------|------------|
+| Google Maps adds training style matching | Critical | Build access management layer fast — maps can't replicate this |
+| ClassPass builds consumer travel product | Critical | Gym relationships built on trust beat relationships built on discounts |
+| Gym chain builds cross-gym passport | High | Partner with chains rather than compete — FitRoam as their distribution |
+| US customer acquisition cost $8–25 per install | High | Target digital nomad communities — free channels, high concentration |
+| Low frequency between trips | Medium | Routes and parks create daily use without travel |
+| Working capital at scale | Medium | Raise ahead of the problem, structure payments user-first |
+| Solo founder execution risk | Medium | Ship MVP fast, validate before scaling, raise to hire |
+
+---
+
+## Open questions
+
+1. What is the legal structure of the gym access relationship? What liability does FitRoam carry if something goes wrong?
+2. How much user identity is shared with gyms at check-in? Name and photo only, or more?
+3. How does FitRoam handle cities where gyms simply don't offer day passes?
+4. When does automatic cancellation replace reminders — what partnerships are required first?
+5. How are routes curated for quality? Raw OpenStreetMap data is not a product — curation is required.
+6. What is the minimum viable gym partnership agreement — what does the gym actually sign?
+
+---
+
+## Revision history
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0 | April 2026 | Initial draft |
+| 1.1 | April 2026 | Access passport framing, monthly pricing as flexible stay access |
+| 2.0 | April 2026 | Full rewrite — simplified vision, gym partnership model, Nottingham launch city |
+| 3.0 | April 2026 | US and Canada expansion integrated, complete navigation structure, social feed spec, revised monetisation, full competitive analysis, corrected valuations, routes and parks as core daily use features, threat mitigations, Phase 5 added |
+
+---
+
+*This document lives at `docs/PRD.md` in the fitroam repository. It is the single source of truth for what FitRoam is and is not. Any feature not described here requires a PRD update before development begins.*
