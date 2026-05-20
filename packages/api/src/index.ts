@@ -2,6 +2,8 @@ import express from 'express'
 import { config } from 'dotenv'
 import gymRoutes from './routes/gyms'
 import { errorHandler } from './middleware/errorHandler'
+import gymRoutes from './routes/gyms'
+import tripRoutes from './routes/trips'
 
 config()
 
@@ -20,6 +22,7 @@ app.get('/health', (_req, res) => {
 })
 
 app.use('/api/gyms', gymRoutes)
+app.use('/api/trips', tripRoutes)
 
 // Error handler — must be last
 app.use(errorHandler)
