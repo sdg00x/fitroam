@@ -196,6 +196,8 @@ model TripLeg {
   city      String
   citySlug  String   @map("city_slug")
   country   String?
+  placeId          String?  @map("place_id")
+  formattedAddress String?  @map("formatted_address")
   lat       Float
   lng       Float
   arriveOn  DateTime @map("arrive_on") @db.Date

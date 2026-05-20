@@ -35,6 +35,8 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
         city:     string
         citySlug: string
         country?: string
+        placeId?:          string
+        formattedAddress?: string
         lat:      number
         lng:      number
         arriveOn: string
@@ -69,7 +71,9 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
           create: legs.map((leg, i) => ({
             city:     leg.city,
             citySlug: leg.citySlug,
-            country:  leg.country,
+            country:          leg.country,
+            placeId:          leg.placeId,
+            formattedAddress: leg.formattedAddress,
             lat:      leg.lat,
             lng:      leg.lng,
             arriveOn: new Date(leg.arriveOn),
@@ -172,9 +176,13 @@ router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => 
       name?:   string
       reason?: string
       addLeg?: {
+        placeId?:          string
+        formattedAddress?: string
         city:     string
         citySlug: string
         country?: string
+        placeId?:          string
+        formattedAddress?: string
         lat:      number
         lng:      number
         arriveOn: string
@@ -201,7 +209,9 @@ router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => 
           tripId:   existing.id,
           city:     addLeg.city,
           citySlug: addLeg.citySlug,
-          country:  addLeg.country,
+          country:          addLeg.country,
+          placeId:          addLeg.placeId,
+          formattedAddress: addLeg.formattedAddress,
           lat:      addLeg.lat,
           lng:      addLeg.lng,
           arriveOn: new Date(addLeg.arriveOn),
