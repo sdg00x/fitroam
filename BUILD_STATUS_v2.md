@@ -224,3 +224,28 @@ Things to do, ordered by phase above:
 
 If the urge to add returns, re-read PRODUCT_v5.md "out of scope" section. Then don't.
 
+
+## Critical issue surfaced — May 22 PM
+
+**Match engine v1 doesn't match the current profile schema.**
+
+The engine was built for an earlier profile shape (`trainingStyle`,
+`equipmentNeeds`, `budgetRange`, `environmentPref`). The app now uses
+`primaryActivity`, `activities`, `priorities`, `lifestyle`,
+`monthlyBudget`, `travelDailyBudget` — and the API maps badly between
+them.
+
+Result: gym scores cluster at 51-69% with no real differentiation.
+The product's core value (smart matching) is currently not working
+the way the rest of the app suggests.
+
+**Phase 1.5 (next session, top priority): match engine v2.**
+
+- Rewrite scoreStyleMatch with proper STYLE_EQUIPMENT_MAP for all 6
+  activity options (staying_in_shape, lifting, powerlifting,
+  bodybuilding, crossfit, calisthenics)
+- Wire priorities into scoring (24hr access, deadlift platform,
+  cleanliness, etc — currently ignored)
+- Use both monthlyBudget AND travelDailyBudget for context-aware pricing
+- Spread scores to 30-95% range, not 51-69% cluster
+- Unit tests for each scoring factor
