@@ -1,3 +1,9 @@
+> **⚠️ SUPERSEDED — May 22, 2026**
+>
+> This document described the human concierge plan. That approach has been replaced by an AI concierge — see PRODUCT_v5.md and BUILD_STATUS_v2.md.
+>
+> Kept in repo for historical reasoning only. Do not implement.
+
 # FitRoam — Concierge Launch Plan
 
 **Status:** Living document. Decisions captured here are committed unless explicitly revised.
