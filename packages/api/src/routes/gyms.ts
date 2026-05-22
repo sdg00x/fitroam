@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express'
 import { prisma } from '../lib/prisma'
 import { scoreGyms, UserProfile } from '../services/matchEngine'
 import { fetchNearbyGyms } from '../services/placesService'
+import { fetchPlaceDetails, upsertGyms } from "../services/placesService"
 
 const router = Router()
 
@@ -57,6 +58,49 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       radius,
       sort,
     })
+  } catch (err) {
+    next(err)
+  }
+})
+
+
+router.get("/:id", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const gymId = req.params.id
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(gymId)
+
+    // 1. If it is a UUID, look it up by id
+    if (isUUID) {
+      const gym = await prisma.gym.findUnique({ where: { id: gymId } })
+      if (!gym) {
+        res.status(404).json({ error: "Gym not found" })
+        return
+      }
+      res.json({ gym })
+      return
+    }
+
+    // 2. Otherwise treat as Google Places ID — try cache first
+    const cached = await prisma.gym.findUnique({ where: { placesId: gymId } })
+    if (cached) {
+      res.json({ gym: cached })
+      return
+    }
+
+    // 3. Not cached — fetch from Google, upsert, return
+    const apiKey = process.env.GOOGLE_PLACES_API_KEY
+    if (!apiKey) {
+      res.status(500).json({ error: "GOOGLE_PLACES_API_KEY not set" })
+      return
+    }
+    const place = await fetchPlaceDetails(gymId, apiKey)
+    await upsertGyms([place])
+    const fresh = await prisma.gym.findUnique({ where: { placesId: gymId } })
+    if (!fresh) {
+      res.status(500).json({ error: "Upsert failed" })
+      return
+    }
+    res.json({ gym: fresh })
   } catch (err) {
     next(err)
   }

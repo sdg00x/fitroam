@@ -204,7 +204,7 @@ async function fetchDetailsForGyms(
   return detailed
 }
 
-async function fetchPlaceDetails(
+export async function fetchPlaceDetails(
   placeId: string,
   apiKey:  string
 ): Promise<PlaceResult> {
@@ -294,7 +294,7 @@ export function getPhotoUrls(
 
 // ─── Store in DB ──────────────────────────────────────────────────────────────
 
-async function upsertGyms(places: PlaceResult[]): Promise<void> {
+export async function upsertGyms(places: PlaceResult[]): Promise<void> {
   for (const place of places) {
     const equipmentTags = inferEquipmentTags(place)
     const photoUrls     = getPhotoUrls(
