@@ -22,11 +22,12 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     }
 
     const profile: UserProfile = {
-      trainingStyle:      (req.query.style as string)  || 'mixed',
-      equipmentNeeds:     [],
-      budgetRange:        (req.query.budget as string) || '10_to_20',
-      maxDistanceMinutes: parseInt(req.query.maxMins as string) || 30,
-      environmentPref:    'both',
+      primaryActivity:    (req.query.primaryActivity as string) || 'staying_in_shape',
+      activities:         (req.query.activities    as string)?.split(',').filter(Boolean) || [],
+      facilityTypes:      (req.query.facilityTypes as string)?.split(',').filter(Boolean) || [],
+      lifestyle:          (req.query.lifestyle     as string)?.split(',').filter(Boolean) || [],
+      priorities:         (req.query.priorities    as string)?.split(',').filter(Boolean) || [],
+      maxDistanceMinutes: parseInt(req.query.maxDistanceMinutes as string) || 20,
     }
 
     const rawGyms = await fetchNearbyGyms(lat, lng, radius)

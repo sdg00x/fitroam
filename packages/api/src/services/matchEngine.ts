@@ -1,25 +1,36 @@
 /**
- * Match engine — scores gyms against a user profile.
+ * Match engine v2 — scores gyms against a user's actual profile.
  *
- * This is a pure function: same inputs always produce same output.
- * No database calls, no side effects. Fully unit-testable.
+ * v2 changes:
+ * - Takes the real profile shape (primaryActivity, priorities, etc.)
+ * - Drops budget scoring (no pricing data — see PRODUCT_v5)
+ * - Wires priorities into scoring as a real factor
+ * - Removes the broken "soft floor" that caused everything to cluster at 51-69%
+ * - Scores spread 25-95% based on actual gym fit
  *
- * Score formula (v1):
- *   style match     40%
- *   price match     25%
- *   distance match  20%
- *   equipment match 15%
- *
- * Each factor returns 0–1, multiplied by its weight.
- * Final score is 0–100, rounded to nearest integer.
+ * Score formula:
+ *   activity fit (equipment match)   35%
+ *   priorities satisfied             30%
+ *   distance                         20%
+ *   rating + popularity              10%
+ *   open now                          5%
  */
 
 export interface UserProfile {
-  trainingStyle:      string
-  equipmentNeeds:     string[]
-  budgetRange:        string   // 'under_5' | '5_to_10' | '10_to_20' | 'over_20'
+  primaryActivity:    string
+  activities:         string[]
+  facilityTypes:      string[]
+  lifestyle:          string[]
+  priorities:         string[]
   maxDistanceMinutes: number
-  environmentPref:    string   // 'indoor' | 'outdoor' | 'both'
+}
+
+export interface GymReview {
+  author: string
+  rating: number
+  text:   string
+  time:   string
+  avatar: string
 }
 
 export interface RawGym {
@@ -31,155 +42,213 @@ export interface RawGym {
   distanceMinutes: number
   equipmentTags:   string[]
   rating:          number | null
+  ratingCount?:    number | null
   openNow:         boolean
   dayPassPence:    number | null
   monthlyPence:    number | null
-  photoUrls?:      string[]        // ← add this
-  reviews?:        GymReview[]     // ← add this
-  websiteUrl?:     string   
-}
-
-export interface GymReview {
-  author: string
-  rating: number
-  text:   string
-  time:   string
-  avatar: string
+  openingHours?:   any
+  photoUrls?:      string[]
+  reviews?:        GymReview[]
+  websiteUrl?:     string
 }
 
 export interface ScoredGym extends RawGym {
-  matchScore:      number   // 0–100
-  matchReasons:    string[] // e.g. ['Free weights', 'Day pass available']
-  priceDisplay:    string   // formatted for UI, e.g. '£8 day pass'
-  priceSubDisplay: string   // e.g. 'or £35/mo · access for your stay'
+  matchScore:      number
+  matchReasons:    string[]
+  priceDisplay:    string
+  priceSubDisplay: string
 }
 
-// ─── Budget ranges in pence per day ──────────────────────────────────────────
+// ─── Activity → expected equipment mapping ──────────────────────────────────
+// Each activity has a set of equipment we'd expect a "good" gym to have.
+// Score is based on coverage — how many of the expected items are present.
 
-const BUDGET_MAX_PENCE: Record<string, number> = {
-  under_5:  500,
-  '5_to_10': 1000,
-  '10_to_20': 2000,
-  over_20:  999999,
+const ACTIVITY_EQUIPMENT: Record<string, string[]> = {
+  staying_in_shape: ['cardio', 'free_weights', 'machines', 'treadmill'],
+  lifting:          ['free_weights', 'barbells', 'power_rack', 'cables', 'dumbbells'],
+  powerlifting:     ['power_rack', 'deadlift_platform', 'barbells', 'bumper_plates'],
+  bodybuilding:     ['machines', 'cables', 'free_weights', 'dumbbells'],
+  crossfit:         ['barbells', 'pull_up_bars', 'rings', 'rowing', 'kettlebells'],
+  calisthenics:     ['pull_up_bars', 'dip_bars', 'rings', 'parallettes'],
+  // Legacy support — if old profiles still send these, fall back to lifting
+  strength:         ['free_weights', 'barbells', 'power_rack', 'cables'],
+  mixed:            ['free_weights', 'cables', 'machines', 'cardio'],
 }
 
-// ─── Training style → equipment mapping ──────────────────────────────────────
+// ─── Priority → check function ──────────────────────────────────────────────
+// Each priority either resolves YES, NO, or UNKNOWN against a gym.
+// We score based on satisfied / known. Unknown priorities don't penalize.
 
-const STYLE_EQUIPMENT_MAP: Record<string, string[]> = {
-  strength:     ['free_weights', 'barbells', 'power_rack', 'cables'],
-  calisthenics: ['pull_up_bars', 'dip_bars', 'rings', 'parallettes'],
-  cardio:       ['treadmill', 'bikes', 'rowing', 'elliptical'],
-  crossfit:     ['barbells', 'pull_up_bars', 'rings', 'cables'],
-  yoga:         ['open_space', 'mats'],
-  mixed:        ['free_weights', 'cables', 'cardio'],
+type PriorityResult = 'yes' | 'no' | 'unknown'
+
+function checkPriority(priority: string, gym: RawGym): PriorityResult {
+  const name = gym.name.toLowerCase()
+  const tags = gym.equipmentTags.map(t => t.toLowerCase())
+
+  switch (priority) {
+    case '24hr': {
+      // Look at openingHours periods — if there's a period covering 24/7, yes
+      const periods = gym.openingHours?.periods
+      if (!periods || periods.length === 0) return 'unknown'
+      // 24h gyms typically have a single period with open day=0 hour=0 and no close
+      const has24h = periods.some((p: any) =>
+        p.open?.hour === 0 && p.open?.minute === 0 && !p.close
+      )
+      return has24h ? 'yes' : 'no'
+    }
+
+    case 'deadlift':
+      if (tags.includes('deadlift_platform')) return 'yes'
+      // Check name for serious-lifting indicators
+      if (/powerlifting|strength|barbell|strongman/.test(name)) return 'yes'
+      return 'unknown' // Google data doesn't reliably tell us
+
+    case 'equipment':
+      // Equipment variety — gym has many tagged equipment types
+      if (tags.length >= 6) return 'yes'
+      if (tags.length >= 3) return 'unknown'
+      return 'no'
+
+    case 'pool':
+      if (tags.some(t => t.includes('pool') || t.includes('swim'))) return 'yes'
+      if (/pool|aquatic|swim/.test(name)) return 'yes'
+      return 'no'
+
+    case 'amenities':
+      // Loose proxy — higher rating gyms tend to have better amenities
+      if (gym.rating && gym.rating >= 4.3) return 'yes'
+      if (gym.rating && gym.rating < 3.8) return 'no'
+      return 'unknown'
+
+    case 'beginner':
+      // Avoid gyms with intense names; prefer high-rated commercial chains
+      if (/powerlifting|hardcore|elite|serious|strong/.test(name)) return 'no'
+      if (/puregym|the gym group|anytime fitness|jd gym/.test(name)) return 'yes'
+      return 'unknown'
+
+    case 'serious':
+      if (/powerlifting|strength|barbell|strongman|hardcore|elite/.test(name)) return 'yes'
+      if (/puregym|the gym group/.test(name)) return 'no'  // chain gyms generally less serious
+      return 'unknown'
+
+    // Honest: these can't be reliably scored from Google data.
+    // Return unknown so they don't penalize gyms unfairly.
+    case 'cleanliness':
+    case 'quiet':
+    case 'community':
+      return 'unknown'
+
+    default:
+      return 'unknown'
+  }
 }
 
 // ─── Scoring factors ──────────────────────────────────────────────────────────
 
-function scoreStyleMatch(profile: UserProfile, gym: RawGym): number {
-  const preferred = STYLE_EQUIPMENT_MAP[profile.trainingStyle] ?? []
-  if (preferred.length === 0) return 0.5
+function scoreActivityFit(profile: UserProfile, gym: RawGym): number {
+  const primary = profile.primaryActivity || 'staying_in_shape'
+  const expected = ACTIVITY_EQUIPMENT[primary] || ACTIVITY_EQUIPMENT.staying_in_shape
 
-  const matches = preferred.filter(eq =>
-    gym.equipmentTags.some(tag => tag.toLowerCase().includes(eq.toLowerCase()))
+  const tags = gym.equipmentTags.map(t => t.toLowerCase())
+  const matched = expected.filter(eq =>
+    tags.some(tag => tag.includes(eq) || eq.includes(tag))
   )
 
-  const matchRate = matches.length / preferred.length
-
-  // Soft floor: if the gym has ANY general fitness equipment, it's at least
-  // a 0.65 match. Pure perfect matches get 1.0. This prevents perfectly good
-  // commercial gyms from ranking below niche specialist gyms just because
-  // Google Places didn't tag every piece of equipment.
-  if (gym.equipmentTags.length > 0 && matchRate < 0.65) {
-    return 0.65
-  }
-
-  return matchRate
+  // Score is matched / expected, but with a small base if SOME match
+  if (matched.length === 0) return 0.1
+  return matched.length / expected.length
 }
 
-function scorePriceMatch(profile: UserProfile, gym: RawGym): number {
-  const budgetPence = BUDGET_MAX_PENCE[profile.budgetRange] ?? 2000
+function scorePriorities(profile: UserProfile, gym: RawGym): number {
+  if (!profile.priorities || profile.priorities.length === 0) return 0.7
+  // No priorities given — neutral score so this factor doesn't dominate
 
-  // Day pass is the ideal — if it fits budget, full score
-  if (gym.dayPassPence !== null) {
-    if (gym.dayPassPence <= budgetPence) return 1.0
-    if (gym.dayPassPence <= budgetPence * 1.25) return 0.6  // slightly over
-    return 0.2
+  let satisfied = 0
+  let known     = 0
+
+  for (const p of profile.priorities) {
+    const result = checkPriority(p, gym)
+    if (result === 'yes') { satisfied++; known++ }
+    else if (result === 'no') { known++ }
+    // 'unknown' doesn't count either way
   }
 
-  // Monthly — estimate per-day cost over 30 days
-  if (gym.monthlyPence !== null) {
-    const perDayPence = Math.round(gym.monthlyPence / 30)
-    if (perDayPence <= budgetPence) return 0.85  // good but not ideal (commitment)
-    if (perDayPence <= budgetPence * 1.5) return 0.5
-    return 0.2
-  }
-
-  return 0.3  // no price data — penalise slightly but don't exclude
+  if (known === 0) return 0.6  // all unknown — neutral, slightly cautious
+  return satisfied / known
 }
 
-function scoreDistanceMatch(profile: UserProfile, gym: RawGym): number {
-  const max = profile.maxDistanceMinutes
+function scoreDistance(profile: UserProfile, gym: RawGym): number {
+  const max = profile.maxDistanceMinutes || 20
   const actual = gym.distanceMinutes
 
-  if (actual <= max * 0.5) return 1.0   // well within tolerance
-  if (actual <= max)       return 0.75  // within tolerance
-  if (actual <= max * 1.3) return 0.4   // slightly over
-  return 0.1                            // too far
+  if (actual <= max * 0.3) return 1.0    // very close
+  if (actual <= max * 0.6) return 0.85
+  if (actual <= max)       return 0.65
+  if (actual <= max * 1.5) return 0.3
+  return 0.05  // too far
 }
 
-function scoreEquipmentMatch(profile: UserProfile, gym: RawGym): number {
-  if (profile.equipmentNeeds.length === 0) return 1.0
+function scoreRating(gym: RawGym): number {
+  if (gym.rating === null || gym.rating === undefined) return 0.5
 
-  const matched = profile.equipmentNeeds.filter(need =>
-    gym.equipmentTags.some(tag => tag.toLowerCase().includes(need.toLowerCase()))
-  )
+  // Account for low review counts — small samples are noisy
+  const count = gym.ratingCount ?? 0
+  const confidence = count >= 50 ? 1 : count / 50
 
-  return matched.length / profile.equipmentNeeds.length
+  // Normalize 0-5 rating to 0-1
+  const normalized = (gym.rating - 2.5) / 2.5
+  const score = Math.max(0, Math.min(1, normalized))
+
+  return score * confidence + 0.5 * (1 - confidence)
 }
 
-// ─── Match reasons — human-readable explanation of the score ─────────────────
+function scoreOpenNow(gym: RawGym): number {
+  return gym.openNow ? 1.0 : 0.5
+}
+
+// ─── Match reasons ───────────────────────────────────────────────────────────
 
 function buildMatchReasons(profile: UserProfile, gym: RawGym): string[] {
   const reasons: string[] = []
-  const preferred = STYLE_EQUIPMENT_MAP[profile.trainingStyle] ?? []
+  const primary  = profile.primaryActivity || 'staying_in_shape'
+  const expected = ACTIVITY_EQUIPMENT[primary] || []
 
-  const matchedEquip = preferred.filter(eq =>
-    gym.equipmentTags.some(tag => tag.toLowerCase().includes(eq.toLowerCase()))
+  const tags = gym.equipmentTags.map(t => t.toLowerCase())
+  const matchedEquip = expected.filter(eq =>
+    tags.some(tag => tag.includes(eq) || eq.includes(tag))
   )
 
   if (matchedEquip.length > 0) {
-    // Capitalise first letter for display
     const formatted = matchedEquip[0].replace(/_/g, ' ')
     reasons.push(formatted.charAt(0).toUpperCase() + formatted.slice(1))
   }
 
-  if (gym.dayPassPence !== null) reasons.push('Day pass available')
-  if (gym.openNow)               reasons.push('Open now')
-  if (gym.distanceMinutes <= 10) reasons.push('Under 10 min walk')
+  if (gym.openNow)                  reasons.push('Open now')
+  if (gym.distanceMinutes <= 10)    reasons.push('Under 10 min walk')
+  if (gym.rating && gym.rating >= 4.5) reasons.push('Highly rated')
 
-  return reasons.slice(0, 3)  // max 3 reasons shown in UI
+  return reasons.slice(0, 3)
 }
 
-// ─── Price display formatting ─────────────────────────────────────────────────
+// ─── Price display — honest about what we don't know ─────────────────────────
 
 function formatPrice(gym: RawGym): { priceDisplay: string; priceSubDisplay: string } {
-  if (gym.dayPassPence !== null) {
+  if (gym.dayPassPence !== null && gym.dayPassPence !== undefined) {
     const dayPass = `£${(gym.dayPassPence / 100).toFixed(0)} day pass`
-    const monthly = gym.monthlyPence !== null
-      ? `or £${(gym.monthlyPence / 100).toFixed(0)}/mo · access for your stay`
+    const monthly = gym.monthlyPence
+      ? `or £${(gym.monthlyPence / 100).toFixed(0)}/mo`
       : ''
     return { priceDisplay: dayPass, priceSubDisplay: monthly }
   }
 
-  if (gym.monthlyPence !== null) {
-    const perDay = Math.round(gym.monthlyPence / 30 / 100)
+  if (gym.monthlyPence !== null && gym.monthlyPence !== undefined) {
     return {
       priceDisplay:    `£${(gym.monthlyPence / 100).toFixed(0)}/mo`,
-      priceSubDisplay: `~£${perDay}/day · access for your stay`,
+      priceSubDisplay: 'Check site for day pass',
     }
   }
 
+  // Honest: we don't have pricing data for most gyms
   return {
     priceDisplay:    'Contact for pricing',
     priceSubDisplay: '',
@@ -190,13 +259,14 @@ function formatPrice(gym: RawGym): { priceDisplay: string; priceSubDisplay: stri
 
 export function scoreGyms(profile: UserProfile, gyms: RawGym[]): ScoredGym[] {
   const scored = gyms.map(gym => {
-    const styleScore    = scoreStyleMatch(profile, gym)    * 0.40
-    const priceScore    = scorePriceMatch(profile, gym)    * 0.25
-    const distanceScore = scoreDistanceMatch(profile, gym) * 0.20
-    const equipScore    = scoreEquipmentMatch(profile, gym)* 0.15
+    const activityScore  = scoreActivityFit(profile, gym)  * 0.35
+    const priorityScore  = scorePriorities(profile, gym)   * 0.30
+    const distanceScore  = scoreDistance(profile, gym)     * 0.20
+    const ratingScore    = scoreRating(gym)                * 0.10
+    const openScore      = scoreOpenNow(gym)               * 0.05
 
-    const rawScore   = styleScore + priceScore + distanceScore + equipScore
-    const matchScore = Math.round(rawScore * 100)
+    const raw   = activityScore + priorityScore + distanceScore + ratingScore + openScore
+    const matchScore = Math.round(raw * 100)
 
     const { priceDisplay, priceSubDisplay } = formatPrice(gym)
 
@@ -209,6 +279,5 @@ export function scoreGyms(profile: UserProfile, gyms: RawGym[]): ScoredGym[] {
     }
   })
 
-  // Sort by match score descending
   return scored.sort((a, b) => b.matchScore - a.matchScore)
 }
