@@ -225,6 +225,38 @@ Things to do, ordered by phase above:
 If the urge to add returns, re-read PRODUCT_v5.md "out of scope" section. Then don't.
 
 
+
+## v1 framing — important context
+
+FitRoam v1 ships as the **intelligence/planning product**. Not the transactional one. See PRODUCT_v5 "Product evolution" section for the full reasoning.
+
+### What this means for code semantics
+
+- "Get access" button on gym detail → semantically "Log visit" or "Mark as going." We are NOT brokering access. The user is recording what they did or intend to do.
+- Day pass / monthly toggle stays in UI for future partnership data but doesn't enforce anything.
+- No "Best price" filter on Explore. We don't have pricing data.
+- "Contact for pricing" stays as the price display for most gyms.
+
+### AI concierge Phase 2 — price-on-demand
+
+When AI concierge ships, one of its capabilities will be fetching pricing from gym websites on demand:
+
+User asks: "What's a push-friendly gym near me with a day pass under £20?"
+
+AI does:
+1. Pulls top matches from match engine
+2. For top 3 gyms, calls each gym's website via web fetch tool
+3. Attempts to extract day pass / monthly pricing
+4. Returns recommendations with whatever pricing it could find
+
+Honest caveats:
+- Will work for ~60-70% of cases. Gym websites are messy.
+- JS-rendered sites may not be readable
+- Some gyms hide pricing entirely
+- AI will sometimes get it wrong — present as "found on their site" not "guaranteed price"
+
+This bridges the no-pricing-database gap until we add manual pricing data in v1.x.
+
 ## Critical issue surfaced — May 22 PM
 
 **Match engine v1 doesn't match the current profile schema.**

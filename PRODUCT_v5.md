@@ -14,6 +14,43 @@ That's it. Everything else — passport, trips, matching, profile — supports t
 
 ---
 
+## Product evolution — North Star vs v1 reality
+
+**North Star (eventual product):** Walk-in temporary access. A traveller lands in any city, opens FitRoam, sees gyms that take walk-ins today, sees prices, gets in the door with a QR or short booking. End-to-end transactional. This is the dream.
+
+**v1 reality:** Intelligence and planning. Without gym partnerships and without scraped pricing data, we cannot deliver the transactional product yet. So v1 is the **intelligence layer** that earns the right to build the transactional layer later.
+
+### Why this sequencing makes sense
+
+- Gym partnerships take months per chain and require negotiation power. We have neither yet.
+- Building the marketplace before having users is backwards — gyms will not partner with an empty app.
+- The intelligence product is genuinely useful on its own (Strava, Komoot, AllTrails all charge for the intelligence layer, not for brokering activities).
+- Every user we onboard for intelligence is a user we can leverage in partnership conversations later ("we have 5K active users walking into your gym monthly — let us integrate booking").
+
+### What v1 commits to
+
+- Match engine that genuinely differentiates gyms by activity, equipment, location, hours, rating
+- Trip planning across cities
+- AI concierge (the headline value, gates the subscription)
+- Fitness passport — long-term habit hook AND future partnership leverage
+- "Log visit" semantics — we are NOT brokering access, the user is logging what they did
+
+### What v1 explicitly does NOT do
+
+- Broker bookings or transactions
+- Promise pricing accuracy (we don't have the data)
+- Guarantee gym entry
+- Take a commission per visit
+- Verify the user actually got in
+
+### v1.x and v2 trajectory
+
+- **v1.0:** Intelligence + subscription. Ship in 6-8 weeks. Earn users.
+- **v1.x:** Add price-on-demand via AI concierge (Phase 2). Manual pricing layer for top 100 gyms per city (paid contractor work). Start partnership conversations with major UK chains.
+- **v2.0:** Integrated booking with partnered chains. Real walk-in access in launch markets. Per-transaction revenue stream alongside subscription.
+
+The North Star stays in view. Every v1 decision is measured against whether it earns the right to v2.
+
 ## What changed from v4
 
 Two strategic decisions made in late May 2026:
@@ -60,7 +97,15 @@ Land in any city. Open FitRoam. Find a gym that matches how you actually train, 
 
 **5. AI concierge** (gated, hideable). Ask FitRoam in natural language: "Plan a 5-day trip to Lisbon with PPL gyms," "Find me a push-friendly gym near Soho," "Book a day pass at the top match for Saturday." The AI uses your profile, trips, and the match engine to answer. Available from a floating button on every screen, hideable in Settings.
 
-### What FitRoam does not do
+### Activities supported (v1)
+
+**Lifting, CrossFit, Calisthenics.** The match engine and AI concierge serve these activities fully.
+
+**Pilates and Yoga — v1.1 consideration.** Not supported in v1. The match engine is gym-shaped; doing studios properly requires class-based logic, schedule integration, and a different scoring model. Slot for v1.1 if user feedback shows demand.
+
+**Everything else** (running, cycling, swimming, climbing, martial arts, group classes) — out of scope. Other apps solve these well.
+
+## What FitRoam does not do
 
 - Running routes (use Strava / Komoot)
 - Outdoor calisthenics parks (use OSM / community maps)
@@ -192,4 +237,7 @@ Maintained here to preserve reasoning for future-self and team:
 - **May 22, 2026:** Routes and Parks pillars scrapped. Reason: undifferentiated, dilutes focus, existing apps solve it well.
 - **May 22, 2026:** Human concierge replaced with AI concierge. Reason: scales globally, near-zero marginal cost, durable moat via constrained AI over FitRoam data.
 - **May 22, 2026:** AI assistant hideable in Settings. Reason: respect user choice, de-risk feature for users who find AI intrusive.
+- **May 22, 2026:** Product evolution sequenced. v1 = intelligence/planning (achievable solo, 6-8 weeks). North Star = walk-in temporary access (requires gym partnerships, deferred to v2). v1 earns the right to v2.
+- **May 22, 2026:** Pricing data not collected for v1. Cannot honestly score budget or filter by price. "Get access" reframed as "Visit gym / Log visit" — we direct, we don't broker. AI concierge in Phase 2 will fetch pricing from gym websites on demand.
+- **May 22, 2026:** Priority filter list trimmed to what we can honestly score from Google Places data. Removed: cleanliness, quiet, community, beginner-friendly, serious-only. Kept: 24hr, deadlift platform, equipment variety. Reason: respect user choice, de-risk feature for users who find AI intrusive.
 
