@@ -99,11 +99,13 @@ Land in any city. Open FitRoam. Find a gym that matches how you actually train, 
 
 ### Activities supported (v1)
 
-**Lifting, CrossFit, Calisthenics.** The match engine and AI concierge serve these activities fully.
+**Lifting, CrossFit, Calisthenics, Staying in shape, Powerlifting, Bodybuilding.** The match engine and AI concierge serve these activities fully.
 
-**Pilates and Yoga — v1.1 consideration.** Not supported in v1. The match engine is gym-shaped; doing studios properly requires class-based logic, schedule integration, and a different scoring model. Slot for v1.1 if user feedback shows demand.
+**Running** — supported as a planning element, not a tracking product. v1 surfaces 3-5 popular running routes per city (sourced from OSM or public route data), viewable on Trip Detail and known to the AI concierge. We do not build run tracking, route creation, social features, or GPX export. Strava remains the place to actually do the running.
 
-**Everything else** (running, cycling, swimming, climbing, martial arts, group classes) — out of scope. Other apps solve these well.
+**Pilates and Yoga — v1.1 consideration.** Not supported in v1.
+
+**Everything else** (cycling, swimming, climbing, martial arts, group classes) — out of scope.
 
 ## What FitRoam does not do
 
@@ -239,5 +241,7 @@ Maintained here to preserve reasoning for future-self and team:
 - **May 22, 2026:** AI assistant hideable in Settings. Reason: respect user choice, de-risk feature for users who find AI intrusive.
 - **May 22, 2026:** Product evolution sequenced. v1 = intelligence/planning (achievable solo, 6-8 weeks). North Star = walk-in temporary access (requires gym partnerships, deferred to v2). v1 earns the right to v2.
 - **May 22, 2026:** Pricing data not collected for v1. Cannot honestly score budget or filter by price. "Get access" reframed as "Visit gym / Log visit" — we direct, we don't broker. AI concierge in Phase 2 will fetch pricing from gym websites on demand.
+- **May 22, 2026:** Running routes added back to v1 as planning element (view-only, sourced from OSM/public data). Strict scope: no tracking, no creation, no social, no GPX. Argument for inclusion: FitRoam is a planning surface; runners planning trips deserve to see route options alongside gym options.
+- **May 22, 2026:** Strava and Whoop integrations evaluated and deferred to post-launch. Neither blocks v1 value prop. Reasons to defer: Strava API approval takes weeks, neither integration solves a problem that breaks the product, better as v1.1/v1.2 press moments.
 - **May 22, 2026:** Priority filter list trimmed to what we can honestly score from Google Places data. Removed: cleanliness, quiet, community, beginner-friendly, serious-only. Kept: 24hr, deadlift platform, equipment variety. Reason: respect user choice, de-risk feature for users who find AI intrusive.
 

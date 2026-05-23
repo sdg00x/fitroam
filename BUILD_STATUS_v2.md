@@ -74,6 +74,29 @@ The "smart layer" — what makes FitRoam feel intelligent.
 - "Good for today" filter on Explore (chip that filters by today's training equipment)
 - Visit memory on gym detail ("You trained here on March 5")
 
+
+### Phase 2.5 — Routes (1-2 sessions)
+
+Routes as a planning element. View-only. Sourced from OSM or public route data.
+
+- Backend endpoint `/api/routes?city=X` returning 3-5 popular routes per city
+- Each route: name, distance, elevation, polyline, "popularity" signal
+- Route card component (name, distance, "View map")
+- Display on Trip Detail screen — "Routes near this leg"
+- Map view modal showing the route
+- AI concierge tool: "suggest a route for [city/distance/level]"
+
+**Hard scope boundaries — DO NOT BUILD:**
+- Run tracking
+- User-created routes
+- Custom route plotting
+- Run history
+- GPX export
+- Social features (following, sharing)
+- Integration with Strava (deferred to v1.1+)
+
+If urge to add any of these returns, re-read this list. Then don't.
+
 ### Phase 3 — AI concierge (4-5 sessions)
 
 The differentiator. See PRODUCT_v5.md for full spec.
