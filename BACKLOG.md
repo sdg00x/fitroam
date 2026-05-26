@@ -174,3 +174,20 @@ Build sequence for magic codes:
 6. Add rate limiting + code expiry (10 min default)
 
 Estimated: 1 focused session.
+
+---
+
+## Day 4 — End of session (May 26, late)
+
+### What broke / what's owed tomorrow
+
+- **Profile sync is broken across signin.** Profile lives only in AsyncStorage on device. Signing in on fresh state means useProfile returns DEFAULT_PROFILE (onboarded: false) → user gets sent through onboarding again. Real fix is server-side profile storage: update UserProfile schema to match mobile shape, add /api/profile GET/PATCH, signin returns profile, useProfile hydrates from server.
+- **Explore UI has visual breakage** (Samuel noted — investigate tomorrow).
+- **useProfile patched tonight to react to user.id changes.** That patch caused the onboarding loop. Already attempted a useRef guard. Tomorrow: revert useProfile reactivity AND fix the root cause (server-side profile sync) in one pass instead of patching.
+
+### Honest accounting
+
+- One month of work (April 27 → May 26), 8 sessions.
+- Strategic scope locked at PRODUCT_v5 only recently — earlier sessions had drift.
+- Pattern: too many "quick fixes" instead of redesigns when bugs surface architectural issues.
+- Going forward: scope FIRST. If a "quick fix" reveals a deeper problem, stop and redesign, don't patch.
