@@ -138,3 +138,39 @@ See `PRODUCT_v5.md` and `BUILD_STATUS_v2.md` for the full reasoning.
 - `BACKLOG.md` (this file)
 - `CONCIERGE_LAUNCH_PLAN.md` (superseded)
 - `PRODUCT_v4.md`, `BUILD_STATUS.md` (history)
+
+---
+
+## Day 4 — Late session (auth foundation)
+
+### Shipped
+
+- Real `/api/auth/signup` endpoint — accepts email/name/phone, creates user
+- Real `/api/auth/signin` endpoint — finds user by email, returns full profile
+- User schema: added `name` and `phone` columns (Prisma migration applied)
+- Backend: killed placeholder lazy-create in trips/gyms/auth (deleted unused gym.ts route file)
+- Mobile: `signUp` and `signIn` methods on UserProvider now call the API
+- GetAccessForm: new `'signin'` mode with email-only field
+- GetAccessForm: "Already have an account? Sign in" + "New here? Create account" toggle
+- Profile: shows authMode-based modal (signup or signin)
+- DB wiped: 17 placeholder visits + 11 placeholder users + 8 trips removed
+- Migration reset all gym data too (will repopulate from Google Places naturally)
+
+### Verified
+
+- Signup with real email → signout → signin with same email → full data restored (name, phone, email)
+- Visit memory will now attach to the right user since signin returns the same user ID
+
+### NEXT SESSION — top priority
+
+**PRE-LAUNCH BLOCKER: Email-only signin is insecure.** Anyone with your email can sign in as you. Tagged in `src/routes/auth.ts`. Must replace with magic codes before any public release.
+
+Build sequence for magic codes:
+1. Pick provider (Resend recommended — 100/day free)
+2. Add code generation + storage table (AuthCode model: code, email, expiresAt)
+3. Update signup/signin to send code instead of returning user immediately
+4. New `/api/auth/verify` endpoint that takes email + code, returns user
+5. Mobile UX: enter email → receive code → enter code → done
+6. Add rate limiting + code expiry (10 min default)
+
+Estimated: 1 focused session.
