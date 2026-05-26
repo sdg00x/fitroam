@@ -30,8 +30,22 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       maxDistanceMinutes: parseInt(req.query.maxDistanceMinutes as string) || 20,
     }
 
+    const requiredEquipment = (req.query.requiredEquipment as string)
+      ?.split(',').filter(Boolean) || []
+
     const rawGyms = await fetchNearbyGyms(lat, lng, radius)
     let   scored  = scoreGyms(profile, rawGyms)
+
+    // If requiredEquipment is set, filter to gyms that have ANY of the required tags
+    // (requiring ALL is too strict — most gyms won't have every item tagged)
+    if (requiredEquipment.length > 0) {
+      scored = scored.filter(gym => {
+        const tags = gym.equipmentTags.map(t => t.toLowerCase())
+        return requiredEquipment.some(req =>
+          tags.some(tag => tag.includes(req.toLowerCase()) || req.toLowerCase().includes(tag))
+        )
+      })
+    }
 
     switch (sort) {
       case 'nearest':
