@@ -348,3 +348,49 @@ Total: ~7-8 sessions of build, plus the user's weekend verification work.
 - Profile, trips, passport (repurposed)
 - Visit confirmation flow (just built, stays)
 - Auth foundation (signup/signin, fine for closed beta)
+
+---
+
+## Founder docs to write (when triggered)
+
+- **LESSONS.md** — when 5+ lessons have accumulated worth writing down. Will backfill: Provider pattern (today), dual source of truth (today), lazy user creation (yesterday), patching vs redesigning (today). Trigger: hitting another architectural mistake worth recording.
+
+- **USER_INTERVIEWS.md** — when TestFlight beta starts. Template + question bank from "The Mom Test." Trigger: first user signs up.
+
+- **PRICING_ANALYSIS.md** — pre-launch, before committing to a public price. Competitor scan, willingness-to-pay research, subscription model justification. Trigger: 2 weeks before App Store.
+
+---
+
+## CURRENT STATE — end of May 27, 2026
+
+### Just done (Day 5)
+- Profile sync done properly via ProfileProvider context pattern
+- Visit confirmation flow (Home card + inline Passport editing)
+- Auth lookup fixes (clerkId → id)
+- Strategic pivot locked: AI-first, 3 cities (London/NYC/Miami)
+- Tab structure dropped from 4 to 3 (Home/Trips/Profile)
+- Explore screen moved from /(tabs)/index.tsx to /results.tsx
+- Founder docs written (Architecture, Tech Cheatsheet, Talking Points)
+
+### Pending — structural rebuild (next session)
+- Rebuild Home with AI prompt as centerpiece
+- City constraint (DB allowlist + onboarding city picker)
+- Trim onboarding 5 steps → 3
+- Trim Profile (drop pattern, facilities, separate budgets)
+- Admin gym verification tool
+
+### Pending — manual work (founder's weekend)
+- Verify top ~100 gyms per city (~300 total) — day pass yes/no, price, equipment tags, vibe, deep-link URL
+
+### Pending — AI concierge (4-5 sessions)
+- /api/concierge backend endpoint with Claude + tools
+- Tool definitions (searchGyms, getUserProfile, saveAsTrip)
+- Streaming status text during query
+- Results screen wired to AI output
+
+### Pending — launch
+- TestFlight setup (Apple Dev Program, signing, build)
+- Closed beta with 20-50 users in 3 cities
+
+### Diagnostics still in code (remove before TestFlight)
+- [Gate] console.log in app/_layout.tsx
