@@ -287,3 +287,64 @@ Total: ~7-8 sessions of build, plus the user's weekend verification work.
 - Profile, trips, passport (repurposed)
 - Visit confirmation flow (just built, stays)
 - Auth foundation (signup/signin, fine for closed beta)
+
+---
+
+## STRATEGIC PIVOT — May 27 (Day 5 PM)
+
+### The decision
+
+FitRoam v1 is repositioned as **AI-first travel-fitness assistant for 3 launch cities: London, New York, Miami.**
+
+### What changes
+
+**Home screen becomes the AI prompt.** Not a FAB, not a tab. The primary action when you open the app is "tell the AI what you need." Existing Home (greeting, training, top match) becomes secondary.
+
+**3 cities only at launch.** Anywhere outside London / NYC / Miami → "coming soon, get notified" screen. Locks down for data quality.
+
+**Manual verification of top ~100 gyms per city (~300 total).** Day pass yes/no, price, equipment tags, vibe, direct deep-link to day-pass URL. Builds the moat.
+
+**Existing pages get repurposed, not deleted:**
+- Explore → AI Results page (where the AI's curated picks land)
+- Trips → AI itinerary storage (passive, AI fills it)
+- Profile → Fitness identity (the AI's context)
+- Match engine v2 → AI's ranking algorithm under the hood
+
+**Subscription priced higher than initial £5.** Target £8-12/month for what this becomes.
+
+### What gets dropped from v1
+
+- Manual gym search as primary flow (still accessible as secondary)
+- Magic codes (deferred — current email auth fine for closed beta)
+- Location search accuracy improvements (no longer relevant with 3-city constraint)
+- Drop UK-only restriction (no longer relevant — actively scoping to UK + 2 US cities)
+- Heavy visual polish pass (minimal — focus on AI screen + results)
+
+### Why this pivot now
+
+User's original product vision was AI-driven temporary-access. Every drift over the past month (routes, community, full search UI) came from anxiety about whether the AI product was "enough." It is. Path forward: build the AI product properly, ship to 3 cities, beta with 20-50 users.
+
+### Realistic timeline
+
+3-4 weeks to TestFlight closed beta. App Store launch after beta feedback.
+
+### v1 build sequence
+
+1. **City constraint** (1 session) — DB allowlist, "coming soon" outside scope
+2. **Home → AI prompt** (1 session) — reposition existing screens
+3. **Onboarding simplification** (0.5 session) — only collect AI-relevant fields
+4. **Admin gym verification tool** (0.5 session) — internal-only screen for batch tagging
+5. **Manual verification of 300 gyms** (User does — weekend of work, not a session)
+6. **AI concierge build** (4-5 sessions) — backend endpoint, tools, UI, action layer
+7. **TestFlight closed beta setup** (1 session)
+
+Total: ~7-8 sessions of build, plus the user's weekend verification work.
+
+### What stays
+
+- Backend: Express + Prisma + Supabase (no stack change)
+- Mobile: Expo + React Native (no stack change)
+- Match engine v2 (becomes AI's ranker)
+- Profile, trips, passport (repurposed)
+- Visit confirmation flow (just built, stays)
+- Auth foundation (signup/signin, fine for closed beta)
