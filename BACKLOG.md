@@ -191,3 +191,38 @@ Estimated: 1 focused session.
 - Strategic scope locked at PRODUCT_v5 only recently — earlier sessions had drift.
 - Pattern: too many "quick fixes" instead of redesigns when bugs surface architectural issues.
 - Going forward: scope FIRST. If a "quick fix" reveals a deeper problem, stop and redesign, don't patch.
+
+---
+
+## Day 5 — May 27 morning
+
+### Shipped — profile sync done properly
+
+- UserProfile schema migrated to match mobile shape exactly (primaryActivity, activities, facilityTypes, lifestyle, priorities, monthlyBudget, travelDailyBudget, maxDistanceMinutes, trainingPattern, themePreference, onboarded)
+- New `/api/profile` endpoints (GET + PATCH)
+- Signup creates default profile row in same transaction
+- Signin returns profile alongside user
+- UserProvider caches profile to AsyncStorage on signup/signin
+- **useProfile rewritten as ProfileProvider + useProfile hook** (was the real bug — two components calling useProfile got separate state, causing onboarding loop)
+- Welcome → signup → onboarding → main flow works
+- Signout → welcome flow works
+- Signin restores profile fully (onboarded users skip onboarding)
+
+### Lesson logged
+
+Two patches on the same bug = redesign needed. Hours wasted today patching symptoms of a hook-instance-isolation problem when the right move was to convert useProfile to a Provider/context pattern from the first failure. Going forward: if a bug returns after a patch, redesign.
+
+### Remaining for v1
+
+- Magic codes for auth (next session priority — current email-only is pre-launch blocker)
+- AI concierge (4-5 sessions, confirmed for v1)
+- Visit confirmation flow ("did you go?")
+- Drop UK-only restriction (global registration)
+- Location search accuracy for UK postcodes
+- Visual polish pass
+- Pre-TestFlight cleanup
+- TestFlight setup
+
+### Diagnostic
+
+Left the `[Gate]` console.log in `app/_layout.tsx` — useful for debugging routing during further development. Remove in Phase 5 (pre-TestFlight cleanup).
