@@ -419,3 +419,22 @@ Total: ~7-8 sessions of build, plus the user's weekend verification work.
 ### Next session
 - Onboarding city-picker step (mobile) — only user-facing piece of city constraint left. Adds screen writing `citySlug` via `useProfile().save()`. Match existing onboarding pattern. Wire into `app/onboarding/_layout.tsx`. Note: onboarding still OLD 5-step flow, not post-pivot 3-step — trim is separate.
 - Backfill `citySlug` on 290 gyms — weekend verification work. London -> `london-gb` etc. Nottingham rows (pre-pivot leftovers) -> null or delete.
+
+### Day 6 — afternoon addendum (mobile onboarding + pivot bug fixes)
+
+Shipped:
+- 3-step onboarding live: city -> activity (style.tsx) -> priorities. `city.tsx` writes citySlug (london-gb/newyork-us/miami-us). priorities.tsx now finishes onboarding (sets onboarded:true, routes to home). lifestyle/budget/training left on disk unreferenced (delete in Phase 5).
+- Verified end-to-end on device: welcome -> signup -> city -> activity -> priorities -> Home, clean.
+
+Latent pivot bugs found + fixed (all from Day 5 `mv` file moves that didn't update imports/routes):
+- `results.tsx` imports were `../../src` (two-level) but file is now one level deep -> `../src`. 7 paths fixed.
+- `(tabs)/` had NO index route — pivot moved (tabs)/index.tsx to results.tsx, so navigating to bare /(tabs) hit unmatched-route. Added (tabs)/index.tsx redirecting to home; also navigate to /(tabs)/home explicitly.
+- Added app/index.tsx root redirect (no root route -> unmatched on boot).
+
+Real runtime bugs found + fixed:
+- ProfileProvider: `lastUserIdRef` initialized to null; on first run null===null made the guard skip before setting loading:false -> profileLoading stuck true forever -> AuthGate never ran. Fixed: init ref to undefined sentinel.
+- welcome.tsx had its own useEffect + onComplete navigation racing the AuthGate -> three navigations in one tick -> unmatched route on signup. Stripped welcome's navigation; AuthGate is now sole router.
+
+Lesson: AuthGate must be the single source of routing truth — no screen should navigate on auth/onboard state, only the gate. And `mv` during the pivot left a trail of broken import paths / missing routes that surface one-at-a-time when the bundler reaches each file.
+
+Still in code (remove Phase 5): original [Gate] console.log in _layout.tsx (predates today).
