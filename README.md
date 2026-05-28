@@ -1,7 +1,6 @@
 # FitRoam
 
-Fitness discovery for travellers. Find gyms, running routes, calisthenics parks,
-and local fitness communities — filtered to your training style, budget, and stay length.
+Fitness discovery for travellers. Find gyms on the go — filtered to your training style, budget, and stay length.
 
 ## Project status
 
