@@ -1,6 +1,6 @@
 # FitRoam
 
-Fitness discovery for travellers. Find gyms on the go — filtered to your training style, budget, and stay length.
+Fitness discovery for travellers. Access gyms on the go — filtered to your training style, budget, and stay length.
 
 ## Project status
 
