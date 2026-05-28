@@ -466,3 +466,83 @@ Not included in v1:
 - Conversation thread / history (each query fresh)
 - Weather widget (drop unless it earns its place later)
 - Voice input wiring (mic icon present, Expo Speech integration deferred — text input works)
+
+---
+
+## Day 6 — May 28, 2026 (CONSOLIDATED — supersedes scattered Day 6 entries above)
+
+Long session. Three things happened: backend city constraint shipped, mobile onboarding trimmed and working, three latent pivot bugs cleared. Plus the Home rebuild direction is now locked to a buildable spec.
+
+### Backend — city constraint (DONE, tested end-to-end)
+- `src/config/cities.ts` — single source of truth for launch cities. Convention `{city}-{country}` lowercase (matches existing `gym_access.city_slug` data): `london-gb`, `newyork-us`, `miami-us`. Exports `CITIES`, `CITY_SLUGS`, `isValidCitySlug()`.
+- `Gym` schema — six new columns (applied via direct SQL to dodge Prisma drift-reset, NOT in migration history): `citySlug` (nullable, verification/analytics tag), `dayPass` (bool), `dayPassPence` (int?), `dayPassUrl` (string?), `verified` (bool default false), `verifiedAt` (timestamptz?). 290 existing rows intact.
+- `UserProfile` schema — `citySlug` (nullable, no default — a defaulted city is a silent wrong answer).
+- `/api/profile` PATCH — validates `citySlug` against allowlist, 400s on invalid with `allowed` list, writes valid ones. Serializer returns `citySlug`. Verified end-to-end: `paris-fr` rejected, `london-gb` writes.
+
+### Mobile — 3-step onboarding (DONE, walked on device)
+- New `app/onboarding/city.tsx` (step 1 of 3) — three city buttons, writes `citySlug`.
+- `style.tsx` repurposed as activity step (step 2 of 3) — content unchanged, renumbered.
+- `priorities.tsx` is now the finish step (step 3 of 3) — sets `onboarded: true`, routes to `/(tabs)/home`.
+- `_layout.tsx` rewired: city -> style -> priorities only.
+- `lifestyle/budget/training` left on disk, unreferenced. Delete in Phase 5.
+- Flow verified on device: welcome -> signup -> city -> activity -> priorities -> Home, clean.
+
+### Latent pivot bugs found + fixed (all from Day 5 `mv` file moves)
+- `results.tsx` imports were `../../src/...` (two-level) but file is now one level deep. 7 paths fixed to `../src/...`.
+- `(tabs)/` had NO index route — the pivot moved `(tabs)/index.tsx` to `results.tsx`, so navigating to bare `/(tabs)` hit the unmatched-route fallback. Added `(tabs)/index.tsx` redirecting to home; also navigate to `/(tabs)/home` explicitly from priorities + AuthGate.
+- Added `app/index.tsx` root redirect (no root route -> unmatched on boot).
+
+### Real runtime bugs found + fixed
+- `ProfileProvider`: `lastUserIdRef` initialised to `null`. On first run, `null === null` made the guard skip before `setLoading(false)` -> profileLoading stuck true forever -> AuthGate never ran. Fixed: init ref to `undefined` sentinel.
+- `welcome.tsx` had its own useEffect + onComplete navigation racing the AuthGate. Three navigations in one tick on signup -> unmatched route. Stripped welcome's navigation. AuthGate is now the sole router.
+
+### Decisions locked
+- Day-pass canonical fact lives on `Gym`, not `PriceReport`. `PriceReport` stays as price-history/observation log for later.
+- Match route flip to DB-first with radius filtering DEFERRED to its own session. Plan: PostGIS `ST_DWithin` against existing lat/lng (no stored geography column at 300-gym scale), verified gyms ranked first, Google as tagged-unverified fallback for thin areas.
+- Concierge/auto-book PARKED pending demand data. When ready: FAKE DOOR ("sort it for me" -> waitlist, zero money, zero legal surface) measures intent rate. Only if intent >~20%: UK solicitor + Stripe Connect + agent-of-record ToS (buy in USER's name with consent, never FitRoam's; never hold raw card data; liability capped not excluded). Rejected outright: charging more then buying cheaper pass (misrepresentation), self-drafted "zero liability" waivers (void under UCTA), typing users' raw cards into gym sites (PCI breach).
+
+### Home rebuild — direction FULLY LOCKED (build next session)
+- Prompt is Home. Dashboard is a separate screen pushed via top-right `ti-layout-dashboard` icon. Two-screen push (NOT a bottom sheet) — faster build, no sheet lib, no gesture conflicts.
+- Prompt screen layout: top wordmark + dashboard icon; middle greeting ("Where are you training, [name]?") + purpose line + 2-3 tappable "TRY" example prompts (auto-fill input on tap); bottom-anchored pill input with mic, "Message FitRoam…" placeholder, circular green send button (ti-arrow-up). Matches ChatGPT/Claude/Perplexity conventions for instant familiarity.
+- Each query is FRESH — no conversation thread on prompt screen in v1. Tap Ask -> push to `/results` -> back returns to empty prompt. Threading is a v1.x feature if users ask.
+- Dashboard screen = current Home cards (training, next trip, top match, passport) almost as-is, minus the weather widget. Left chevron back returns to prompt.
+- No tab bar on the prompt screen — prompt owns the full viewport.
+- Mic icon present, Expo Speech wiring deferred — text input works for v1.
+
+### Lessons logged
+- AuthGate must be the single source of routing truth — no screen should navigate on auth/onboard state, only the gate.
+- `mv` during the pivot left a trail of broken import paths and missing routes that surfaced one-at-a-time when the bundler reached each file. Pattern: file moves require import-path audit AND route-resolution audit, not just the move.
+- Held the concierge legal line under sustained pressure from external "growth coach" sources that repeatedly reintroduced conceded risks in new forms (virtual cards -> typing user's real card; "zero liability" waivers; "charge £60 buy £40"). The constraints are real; the workarounds keep trying to route around them. Evaluate against FitRoam's actual constraints, not source confidence.
+
+### Pre-existing issues found (log, don't chase)
+- Prisma drift: Supabase ships `postgis`/`pgcrypto`/`pg_stat_statements`/`supabase_vault` not in migration history -> `migrate dev` wants a destructive reset. Real fix: `prisma migrate resolve` to baseline. Until then, schema changes go via direct SQL + `prisma generate`.
+- `tsconfig.json` line 2: `moduleResolution: bundler` incompatible with current `module` -> `tsc --noEmit` can't run as CI check. Runtime fine (tsx ignores it).
+- Prisma 5.22 -> 7 upgrade available. Do NOT do mid-build.
+- Original `[Gate]` console.log in `_layout.tsx` (predates today, slated for Phase 5).
+- "Set your training pattern" card on Home references `trainingPattern`, which the trimmed onboarding no longer collects. Decide on Home rebuild: optional nudge or cut.
+
+---
+
+## What's next (priority order)
+
+### Next session (pick one to start)
+1. **Home rebuild** — build the prompt screen + dashboard screen per locked spec above. Highest-visibility piece, defines the AI-first product.
+2. **Match route DB-first flip** — PostGIS radius query, verified gyms ranked first, Google as fallback. Unblocks the verification work meaning something at runtime.
+
+### Founder weekend work (no Claude session needed)
+- Backfill `citySlug` on 290 gyms. London gyms -> `london-gb`, etc. Nottingham rows (pre-pivot leftovers) -> null or delete.
+- Begin manual verification of top ~100 gyms per launch city (~300 total): day pass yes/no, price (`dayPassPence`), deep-link URL (`dayPassUrl`), equipment tags, set `verified: true` + `verifiedAt`.
+
+### Sessions after Home rebuild
+3. **AI concierge build** (4-5 sessions) — `/api/concierge` endpoint with Claude + tools (`searchGyms`, `getUserProfile`, `saveAsTrip`), streaming status, wired to `/results` screen. Match engine v2 becomes the AI's ranker.
+4. **Fake door for concierge auto-book** — measure intent rate, no money, no legal surface.
+5. **Pre-TestFlight cleanup** — remove diagnostic `[Gate]` log, empty/error state audit, ToS + Privacy drafts, App Store metadata, delete onboarding files `lifestyle/budget/training`.
+6. **TestFlight setup** — Apple Developer Program, signing, first build, closed beta with 20-50 users across 3 cities.
+
+### v1.1+ (post-launch, deferred)
+- Magic codes for auth (current email-only is closed-beta-only).
+- Routes-as-viewing.
+- Strava/Whoop integrations.
+- User-generated content (gym reviews).
+- Pilates/Yoga support.
+- 4th city.
