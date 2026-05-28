@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express'
 import { prisma } from '../lib/prisma'
 import { scoreGyms, UserProfile } from '../services/matchEngine'
 import { fetchNearbyGyms } from '../services/placesService'
+import { fetchPlaceDetails, upsertGyms } from "../services/placesService"
 
 const router = Router()
 
@@ -21,15 +22,30 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     }
 
     const profile: UserProfile = {
-      trainingStyle:      (req.query.style as string)  || 'mixed',
-      equipmentNeeds:     [],
-      budgetRange:        (req.query.budget as string) || '10_to_20',
-      maxDistanceMinutes: parseInt(req.query.maxMins as string) || 30,
-      environmentPref:    'both',
+      primaryActivity:    (req.query.primaryActivity as string) || 'staying_in_shape',
+      activities:         (req.query.activities    as string)?.split(',').filter(Boolean) || [],
+      facilityTypes:      (req.query.facilityTypes as string)?.split(',').filter(Boolean) || [],
+      lifestyle:          (req.query.lifestyle     as string)?.split(',').filter(Boolean) || [],
+      priorities:         (req.query.priorities    as string)?.split(',').filter(Boolean) || [],
+      maxDistanceMinutes: parseInt(req.query.maxDistanceMinutes as string) || 20,
     }
+
+    const requiredEquipment = (req.query.requiredEquipment as string)
+      ?.split(',').filter(Boolean) || []
 
     const rawGyms = await fetchNearbyGyms(lat, lng, radius)
     let   scored  = scoreGyms(profile, rawGyms)
+
+    // If requiredEquipment is set, filter to gyms that have ANY of the required tags
+    // (requiring ALL is too strict — most gyms won't have every item tagged)
+    if (requiredEquipment.length > 0) {
+      scored = scored.filter(gym => {
+        const tags = gym.equipmentTags.map(t => t.toLowerCase())
+        return requiredEquipment.some(req =>
+          tags.some(tag => tag.includes(req.toLowerCase()) || req.toLowerCase().includes(tag))
+        )
+      })
+    }
 
     switch (sort) {
       case 'nearest':
@@ -57,6 +73,49 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       radius,
       sort,
     })
+  } catch (err) {
+    next(err)
+  }
+})
+
+
+router.get("/:id", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const gymId = req.params.id
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(gymId)
+
+    // 1. If it is a UUID, look it up by id
+    if (isUUID) {
+      const gym = await prisma.gym.findUnique({ where: { id: gymId } })
+      if (!gym) {
+        res.status(404).json({ error: "Gym not found" })
+        return
+      }
+      res.json({ gym })
+      return
+    }
+
+    // 2. Otherwise treat as Google Places ID — try cache first
+    const cached = await prisma.gym.findUnique({ where: { placesId: gymId } })
+    if (cached) {
+      res.json({ gym: cached })
+      return
+    }
+
+    // 3. Not cached — fetch from Google, upsert, return
+    const apiKey = process.env.GOOGLE_PLACES_API_KEY
+    if (!apiKey) {
+      res.status(500).json({ error: "GOOGLE_PLACES_API_KEY not set" })
+      return
+    }
+    const place = await fetchPlaceDetails(gymId, apiKey)
+    await upsertGyms([place])
+    const fresh = await prisma.gym.findUnique({ where: { placesId: gymId } })
+    if (!fresh) {
+      res.status(500).json({ error: "Upsert failed" })
+      return
+    }
+    res.json({ gym: fresh })
   } catch (err) {
     next(err)
   }
