@@ -438,3 +438,13 @@ Real runtime bugs found + fixed:
 Lesson: AuthGate must be the single source of routing truth — no screen should navigate on auth/onboard state, only the gate. And `mv` during the pivot left a trail of broken import paths / missing routes that surface one-at-a-time when the bundler reaches each file.
 
 Still in code (remove Phase 5): original [Gate] console.log in _layout.tsx (predates today).
+
+### Home rebuild — final direction (build next session)
+
+LOCKED:
+- Two-screen push (NOT a bottom sheet). Top-right icon pushes /dashboard. Standard expo-router push, back gesture returns to prompt. Faster build, no sheet lib, no gesture conflicts.
+- Prompt screen = standard chat-app layout for user familiarity. Input bottom-anchored, mic, green Ask button, conversational placeholder showing example query syntax ("London 3 days, Miami 2, upper body, under £70"). Reference shape closer to Perplexity than ChatGPT: chat-feel input, structured results output.
+- Each query is FRESH — no conversation thread/history on the prompt screen in v1. Like a search bar. Tap Ask -> push to /results -> back returns to empty prompt. Simpler state, no multi-turn context to manage. Threading is a v1.x feature if users ask.
+- Placeholder + brand framing make purpose unmistakable: this is "find gyms when you travel," not a general chatbot. Avoids training users to expect open-ended chat.
+- Dashboard screen = current Home cards (training, top match, passport, etc.) almost as-is. Reached via top-right ti-layout-dashboard icon. Standard back to return.
+- Open question for build: does the greeting ("Hey Dan") stay on prompt or move to dashboard? Lean toward keeping on prompt — warm anchor, doesn't compete with input.
