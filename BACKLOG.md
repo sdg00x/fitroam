@@ -448,3 +448,21 @@ LOCKED:
 - Placeholder + brand framing make purpose unmistakable: this is "find gyms when you travel," not a general chatbot. Avoids training users to expect open-ended chat.
 - Dashboard screen = current Home cards (training, top match, passport, etc.) almost as-is. Reached via top-right ti-layout-dashboard icon. Standard back to return.
 - Open question for build: does the greeting ("Hey Dan") stay on prompt or move to dashboard? Lean toward keeping on prompt — warm anchor, doesn't compete with input.
+
+### Home rebuild — visual locked
+
+Prompt screen layout:
+- Top: "FitRoam" wordmark left of dashboard icon (ti-layout-dashboard, top-right). Single tap pushes /dashboard.
+- Middle: greeting ("Where are you training, [name]?") + one-line purpose statement + 2-3 "TRY" example prompts (tappable, auto-fill the input).
+- Bottom-anchored: pill-shaped input with mic icon left, "Message FitRoam…" placeholder, circular green send button (ti-arrow-up) right. Matches ChatGPT/Claude/Perplexity convention for instant familiarity.
+- No tab bar on this screen — prompt owns the full viewport.
+
+Dashboard screen layout:
+- Top: back chevron left, "Your stuff" title center, empty right slot.
+- Cards stack: today's training, next trip, top match, passport (current Home cards, minus the weather widget).
+- Standard expo-router back returns to prompt.
+
+Not included in v1:
+- Conversation thread / history (each query fresh)
+- Weather widget (drop unless it earns its place later)
+- Voice input wiring (mic icon present, Expo Speech integration deferred — text input works)
