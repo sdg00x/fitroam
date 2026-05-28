@@ -394,3 +394,28 @@ Total: ~7-8 sessions of build, plus the user's weekend verification work.
 
 ### Diagnostics still in code (remove before TestFlight)
 - [Gate] console.log in app/_layout.tsx
+
+---
+
+## Day 6 — May 28 (City constraint + day-pass schema foundation)
+
+### Shipped — backend
+- `src/config/cities.ts` — single source of truth for launch cities. Convention `{city}-{country}` lowercase (matches existing `gym_access` data): `london-gb`, `newyork-us`, `miami-us`. Exports `CITIES`, `CITY_SLUGS`, `isValidCitySlug()`.
+- `Gym` schema — six new columns (applied via direct SQL to dodge Prisma drift-reset, NOT in migration history): `citySlug` (nullable, verification/analytics tag), `dayPass` (bool), `dayPassPence` (int?), `dayPassUrl` (string?), `verified` (bool default false), `verifiedAt` (timestamptz?). 290 existing rows intact.
+- `UserProfile` schema — `citySlug` (nullable, no default — a defaulted city is a silent wrong answer).
+- `/api/profile` PATCH — validates `citySlug` against allowlist, 400s on invalid with `allowed` list, writes valid ones. Serializer returns `citySlug`. Verified end-to-end: `paris-fr` rejected, `london-gb` writes.
+
+### Decisions locked
+- Day-pass fact lives on `Gym`, not `PriceReport`. Canonical one-per-gym truth (what weekend verification fills, what AI quotes). `PriceReport` stays as the price-history/observation log for later.
+- Match route flips to DB-first with radius filtering — DEFERRED to its own session. Current `/api/gyms` reads live Google Places via `fetchNearbyGyms`, not the DB. Plan: PostGIS `ST_DWithin` against existing lat/lng (no stored geography column at 300-gym scale), verified gyms ranked first, Google as tagged-unverified fallback for thin areas.
+- Concierge/auto-book model — PARKED pending demand data. Schema supports it; do not build. When ready: test via FAKE DOOR ("sort it for me" -> waitlist, zero money, zero legal surface), measure intent rate. Only if intent >~20%: UK solicitor, Stripe Connect, agent-of-record ToS (buy in USER's name w/ consent, never FitRoam's; never hold raw card data; liability capped not excluded). Rejected outright: charging more then buying cheaper pass (misrepresentation), self-drafted "zero liability" waivers (void under UCTA), typing users' raw cards into gym sites (PCI breach).
+
+### Pre-existing issues found (log, don't chase)
+- Prisma drift: Supabase ships postgis/pgcrypto/pg_stat_statements/supabase_vault not in migration history -> `migrate dev` wants a destructive reset. Real fix: `prisma migrate resolve` to baseline. Until then, schema changes go via direct SQL + `prisma generate`.
+- `tsconfig.json` line 2: `moduleResolution: bundler` incompatible with current `module` -> `tsc --noEmit` can't run as CI check. Runtime fine (tsx ignores it).
+- Prisma 5.22 -> 7 upgrade available. Do NOT do mid-build.
+- `[Gate]` console.log still in `app/_layout.tsx` (remove Phase 5).
+
+### Next session
+- Onboarding city-picker step (mobile) — only user-facing piece of city constraint left. Adds screen writing `citySlug` via `useProfile().save()`. Match existing onboarding pattern. Wire into `app/onboarding/_layout.tsx`. Note: onboarding still OLD 5-step flow, not post-pivot 3-step — trim is separate.
+- Backfill `citySlug` on 290 gyms — weekend verification work. London -> `london-gb` etc. Nottingham rows (pre-pivot leftovers) -> null or delete.
