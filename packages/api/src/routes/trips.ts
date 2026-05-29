@@ -3,18 +3,9 @@ import { prisma } from '../lib/prisma'
 
 const router = Router()
 
-// Helper: find-or-create user from x-user-id header
-async function getOrCreateUser(clerkId: string) {
-  let user = await prisma.user.findUnique({ where: { clerkId } })
-  if (!user) {
-    user = await prisma.user.create({
-      data: {
-        clerkId,
-        email: `${clerkId}@placeholder.local`,
-      },
-    })
-  }
-  return user
+// Helper: find user from x-user-id header. Returns null if not found.
+async function findUser(userId: string) {
+  return prisma.user.findUnique({ where: { id: userId } })
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -60,7 +51,11 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
       }
     }
 
-    const user = await getOrCreateUser(clerkId)
+    const user = await findUser(clerkId)
+    if (!user) {
+      res.status(401).json({ error: "User not found. Sign up first." })
+      return
+    }
 
     const trip = await prisma.trip.create({
       data: {
@@ -102,7 +97,11 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       return
     }
 
-    const user = await getOrCreateUser(clerkId)
+    const user = await findUser(clerkId)
+    if (!user) {
+      res.status(401).json({ error: "User not found. Sign up first." })
+      return
+    }
 
     const trips = await prisma.trip.findMany({
       where:   { userId: user.id },
@@ -130,7 +129,11 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
       return
     }
 
-    const user = await getOrCreateUser(clerkId)
+    const user = await findUser(clerkId)
+    if (!user) {
+      res.status(401).json({ error: "User not found. Sign up first." })
+      return
+    }
 
     const trip = await prisma.trip.findFirst({
       where: { id: req.params.id, userId: user.id },
@@ -162,7 +165,11 @@ router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => 
       return
     }
 
-    const user = await getOrCreateUser(clerkId)
+    const user = await findUser(clerkId)
+    if (!user) {
+      res.status(401).json({ error: "User not found. Sign up first." })
+      return
+    }
 
     const existing = await prisma.trip.findFirst({
       where: { id: req.params.id, userId: user.id },
@@ -246,7 +253,11 @@ router.delete('/:id', async (req: Request, res: Response, next: NextFunction) =>
       return
     }
 
-    const user = await getOrCreateUser(clerkId)
+    const user = await findUser(clerkId)
+    if (!user) {
+      res.status(401).json({ error: "User not found. Sign up first." })
+      return
+    }
 
     const existing = await prisma.trip.findFirst({
       where: { id: req.params.id, userId: user.id },
@@ -285,7 +296,11 @@ router.post('/:id/legs/:legId/gyms', async (req: Request, res: Response, next: N
       return
     }
 
-    const user = await getOrCreateUser(clerkId)
+    const user = await findUser(clerkId)
+    if (!user) {
+      res.status(401).json({ error: "User not found. Sign up first." })
+      return
+    }
 
     // Verify trip + leg ownership
     const trip = await prisma.trip.findFirst({
@@ -332,7 +347,11 @@ router.delete('/:id/gyms/:tripGymId', async (req: Request, res: Response, next: 
       return
     }
 
-    const user = await getOrCreateUser(clerkId)
+    const user = await findUser(clerkId)
+    if (!user) {
+      res.status(401).json({ error: "User not found. Sign up first." })
+      return
+    }
 
     // Verify trip ownership
     const trip = await prisma.trip.findFirst({

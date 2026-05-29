@@ -6,6 +6,9 @@ import gymRoutes from './routes/gyms'
 import tripRoutes from './routes/trips'
 import placeRoutes from './routes/places'
 import weatherRoutes from './routes/weather'
+import authRoutes from './routes/auth'
+import profileRoutes from './routes/profile'
+import visitsRoutes from './routes/visits'
 import placeRoutes from './routes/places'
 
 config()
@@ -28,6 +31,9 @@ app.use('/api/gyms', gymRoutes)
 app.use('/api/trips', tripRoutes)
 app.use('/api/places', placeRoutes)
 app.use('/api/weather', weatherRoutes)
+app.use('/api/auth', authRoutes)
+app.use('/api/profile', profileRoutes)
+app.use('/api/visits', visitsRoutes)
 
 // Error handler — must be last
 app.use(errorHandler)

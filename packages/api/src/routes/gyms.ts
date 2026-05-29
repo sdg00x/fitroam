@@ -148,15 +148,11 @@ router.post('/:id/access', async (req: Request, res: Response, next: NextFunctio
       return
     }
 
-    // Find or create the placeholder user by clerkId (since we don't have real auth yet)
-    let user = await prisma.user.findUnique({ where: { clerkId: userId } })
+    console.log('[Access] looking for user id:', userId)
+    const user = await prisma.user.findUnique({ where: { id: userId } })
     if (!user) {
-      user = await prisma.user.create({
-        data: {
-          clerkId: userId,
-          email:   `${userId}@placeholder.local`,
-        },
-      })
+      res.status(401).json({ error: "User not found. Sign up first." })
+      return
     }
 
     const access = await prisma.gymAccess.create({
@@ -166,7 +162,6 @@ router.post('/:id/access', async (req: Request, res: Response, next: NextFunctio
         accessType,
         citySlug:        citySlug ?? 'unknown',
         expectedEndDate: new Date(expectedEndDate),
-        status:          'active',
       },
     })
 
@@ -180,6 +175,102 @@ router.post('/:id/access', async (req: Request, res: Response, next: NextFunctio
       },
       gym: { id: gym.id, name: gym.name },
     })
+  } catch (err) {
+    next(err)
+  }
+})
+
+
+router.get("/:id/visits", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params
+    const userId = req.headers["x-user-id"] as string
+
+    if (!userId) {
+      res.status(400).json({ error: "Missing x-user-id header" })
+      return
+    }
+
+    const visits = await prisma.gymAccess.findMany({
+      where:   { gymId: id, userId },
+      orderBy: { activatedAt: "desc" },
+      select: {
+        id:               true,
+        accessType:       true,
+        activatedAt:      true,
+        expectedEndDate:  true,
+        status:           true,
+        notes:            true,
+      },
+    })
+
+    res.json({ visits, total: visits.length })
+  } catch (err) {
+    next(err)
+  }
+})
+
+
+// PATCH /api/gyms/:gymId/visits/:visitId — confirm or deny a visit
+router.patch("/:gymId/visits/:visitId", async (req, res, next) => {
+  try {
+    const { gymId, visitId } = req.params
+    const userId = req.headers["x-user-id"] as string
+    const { status } = req.body
+
+    if (!userId) {
+      res.status(400).json({ error: "Missing x-user-id header" })
+      return
+    }
+    if (!status || !["pending", "confirmed", "denied"].includes(status)) {
+      res.status(400).json({ error: "status must be pending, confirmed, or denied" })
+      return
+    }
+
+    // Verify visit belongs to this user
+    const visit = await prisma.gymAccess.findFirst({
+      where: { id: visitId, userId, gymId },
+    })
+    if (!visit) {
+      res.status(404).json({ error: "Visit not found" })
+      return
+    }
+
+    const updated = await prisma.gymAccess.update({
+      where: { id: visitId },
+      data: {
+        status,
+        confirmedAt: status === "confirmed" ? new Date() : null,
+      },
+    })
+
+    res.json({ visit: updated })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// DELETE /api/gyms/:gymId/visits/:visitId — remove a visit from passport
+router.delete("/:gymId/visits/:visitId", async (req, res, next) => {
+  try {
+    const { gymId, visitId } = req.params
+    const userId = req.headers["x-user-id"] as string
+
+    if (!userId) {
+      res.status(400).json({ error: "Missing x-user-id header" })
+      return
+    }
+
+    const visit = await prisma.gymAccess.findFirst({
+      where: { id: visitId, userId, gymId },
+    })
+    if (!visit) {
+      res.status(404).json({ error: "Visit not found" })
+      return
+    }
+
+    await prisma.gymAccess.delete({ where: { id: visitId } })
+    res.json({ deleted: true })
   } catch (err) {
     next(err)
   }

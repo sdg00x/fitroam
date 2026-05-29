@@ -546,3 +546,87 @@ Long session. Three things happened: backend city constraint shipped, mobile onb
 - User-generated content (gym reviews).
 - Pilates/Yoga support.
 - 4th city.
+
+---
+
+## Day 7 — May 29, 2026 (Home rebuild — AI-first prompt screen)
+
+### Shipped — Home is now the AI prompt
+
+- `app/(tabs)/home.tsx` fully rewritten. Single job: AI prompt input. Old greeting/training/top-match/passport/next-trip cards removed (still accessible via Trips and Profile tabs — nothing deleted from the system, just unbundled from Home).
+- Layout: top-center brand row (waveform icon + "FitRoam" wordmark), centered greeting ("GOOD MORNING/AFTERNOON/EVENING" eyebrow + "Where are you training, {name}?" + purpose line), TRY section with 3 quoted example prompts, bottom-anchored input pill.
+- Examples are tap-to-fill-and-focus (not auto-submit) — teaches the prompt syntax instead of skipping past it.
+- ASK behavior: `router.push('/results', { prompt })`. Each query is fresh, no thread state on prompt screen.
+- Theme-aware throughout: uses `colors.background`/`surface`/`textPrimary`/`textSecondary`/`accent`/`accentText` from existing tokens. Light + dark mode both render correctly (verified via iOS sim Cmd+Shift+A toggle).
+
+### Shipped — brand waveform icon
+
+- New `src/components/WaveformIcon.tsx`. Inline SVG, 5 vertical bars (heights 6/12/18/12/6), `{ size, color }` props. Installed `react-native-svg` via `expo install` (matched to SDK 54).
+- Used in two places: top bar brand mark (size 20, accent color) and the mic CTA button (size 26, accentText on accent bg).
+- Same component → consistent brand language between logo and voice CTA.
+
+### Shipped — mic↔send swap CTA
+
+- Right-side button is the dominant visual element. 52×52 circle, accent green, soft shadow.
+- Empty input → green button shows waveform icon (mic-as-voice-CTA). Designed to feel "alluring" — encourages voice over typing as the default.
+- User starts typing → same button morphs to arrow-up (send). Same size, same green, same position — no jarring resize.
+- Mic press currently focuses the input (Expo Speech wiring still deferred to v1.x).
+
+### Shipped — /results placeholder
+
+- `app/results.tsx` fully rewritten. Old Explore UI (Nottingham match list, sort/filter chips, top-match card) scrapped. In git history if ever needed.
+- New layout: back chevron, user's prompt echoed at top in a "YOU ASKED" bubble, big centered placeholder with sparkles icon + "FitRoam AI is on the way" copy. Honest about the state — closed beta will see this for a session or two before concierge lands.
+
+### Shipped — tab + routing cleanup
+
+- Killed `app/(tabs)/dashboard.tsx`. No two-screen push pattern after all (briefly explored, then dropped on the call that AI-first means no escape hatch to legacy cards).
+- `(tabs)/_layout.tsx` rewritten: only HOME / TRIPS / PROFILE in the tab bar. `index.tsx` (the redirect file) hidden via `href: null`.
+- Bug fix in same file: `colors.isDark` was a no-op (it's `isDark` at top level of `useTheme()`, not nested). Active green tab now renders correctly in dark mode. Pre-existing, just caught while in here.
+
+### Decisions locked
+
+- **No dashboard screen.** Tempting to keep as a "backup" — that temptation is the same drift that produced routes/community/full-search anxiety over the past month. AI-first means one job on the headline screen. Old Home cards live on in their own tabs and via future AI tools (e.g. "what should I train today?" hits `useTodaySession`).
+- **Brand color stays `#c8ff57`** (existing accent token), not the brighter `#a8e635` briefly hardcoded. Honored the design system instead of forking it.
+- **Inline SVG over icon-font waveform.** Reusable component, exact shape match, no bundle bloat. One source of truth for the brand mark whether at 20px (top bar) or 26px (CTA).
+- **Examples tap-to-fill-and-focus, not auto-submit.** Teaching prompt syntax > demoing one example.
+- **ASK pushes to /results with prompt param, not stubbed with toast.** Wires the navigation end-to-end so concierge lands as a one-line swap from "show placeholder" to "call /api/concierge".
+
+### Lessons logged
+
+- The `node -e "..."` patching trick is a zsh quoting nightmare — backticks inside double-quoted shell strings, plus history-expansion on `!`, ate two attempts at home.tsx. Plain `cat > file <<'EOF'` heredocs are the safe default. Reach for node only when surgical edits inside a larger file demand it.
+- Sentimentality about deleted UI is a real cost. Felt the pull to keep the dashboard despite it contradicting the locked product framing. Pattern: when a "backup" or "fallback" screen feels protective, that's anxiety about the headline product, not a real user need. Cut it.
+
+### Files touched
+
+- `app/(tabs)/home.tsx` — full rewrite (AI prompt screen)
+- `app/(tabs)/_layout.tsx` — full rewrite (3-tab structure, isDark fix)
+- `app/(tabs)/dashboard.tsx` — deleted
+- `app/results.tsx` — full rewrite (AI placeholder)
+- `src/components/WaveformIcon.tsx` — new
+- `package.json` — `react-native-svg` added via `expo install`
+
+### Pre-existing issues still open (log, don't chase)
+
+- Prisma drift on Supabase extensions (postgis/pgcrypto/etc.). Schema changes still go via direct SQL + `prisma generate`.
+- `tsconfig.json` `moduleResolution: bundler` blocks `tsc --noEmit` as CI check.
+- Prisma 5.22 → 7 upgrade available, hold off mid-build.
+- `[Gate]` console.log still in `app/_layout.tsx`, remove Phase 5.
+- Onboarding files `lifestyle.tsx`, `budget.tsx`, `training.tsx`, `facilities.tsx` still on disk unreferenced. Delete in Phase 5.
+
+---
+
+## What's next (priority order)
+
+### Next session (pick one)
+1. **Match route DB-first flip** — PostGIS `ST_DWithin` against existing lat/lng, verified gyms ranked first, Google as fallback for thin areas. Unblocks the verification work meaning something at runtime, and the concierge will call this route as its `searchGyms` tool.
+2. **AI concierge build — session 1 of 4-5** — `/api/concierge` backend endpoint scaffold with Anthropic client, tool definitions (`searchGyms`, `getUserProfile`, `saveAsTrip`), system prompt v1. Mobile `/results` swaps from placeholder to live AI output.
+
+### Founder weekend work (no Claude session)
+- Backfill `citySlug` on 290 existing gyms (`london-gb` / `newyork-us` / `miami-us`; Nottingham rows → null or delete).
+- Begin manual verification of ~300 gyms across 3 cities: `dayPass` bool, `dayPassPence`, `dayPassUrl`, equipment tags, set `verified: true` + `verifiedAt`.
+
+### Sessions after that
+3. AI concierge sessions 2–5 (streaming status, full tool execution loop, multi-leg trip generation, polish + trust patterns)
+4. Fake door for concierge auto-book — "sort it for me" → waitlist, measure intent rate, no money, no legal surface
+5. Pre-TestFlight cleanup — remove `[Gate]` log, delete orphan onboarding files, empty/error state audit, ToS + Privacy drafts, App Store metadata
+6. TestFlight setup — Apple Developer Program, signing, first build, closed beta with 20-50 users across 3 cities

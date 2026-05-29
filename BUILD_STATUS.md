@@ -429,3 +429,24 @@ Things deliberately not locked here because they need more context.
 ## Changelog
 
 - **May 20, 2026:** Initial document. End of a session that shipped 8 features end-to-end, the planning/auth foundation, and the Profile tab redesign. Locks in 13 architectural decisions, updated build sequence with concierge last, full backlog of known issues.
+
+## Day 2 PM additions to backlog
+
+### Bug: Non-gym results in Explore
+Match engine returns personal trainers and wellness studios that aren't actual gyms (e.g. "Bear Fitness Personal training", "Time2rejuven8"). The `isActualGym` filter in `placesService.ts` isn't catching them.
+
+Fix approach (next session):
+- Tighten name filtering — exclude "personal training", "rejuven", "wellness", "massage"
+- Check Google Places `types` array more strictly — only allow `gym` or `health_club`, not just `establishment`
+- Consider a manual blocklist for repeat offenders
+- Maybe add a confidence score and threshold
+
+### Pending small items
+- Remove "Hey" from Home greeting (visual)
+- Sign-up CTA on Profile when no user (real gap — user can't sign up from Profile tab)
+- Visual polish on Home Top match card (real photo landed, but card could feel a bit more premium)
+
+### Sprinkles still on docket (step 17 in build sequence)
+- Today's training → match engine integration (currently hardcoded equipment hints)
+- "Good for today" filter on Explore (based on training pattern)
+- Visit memory on gym detail (remember user's last visit, surface it)
