@@ -1,6 +1,5 @@
 import express from 'express'
 import { config } from 'dotenv'
-import gymRoutes from './routes/gyms'
 import { errorHandler } from './middleware/errorHandler'
 import gymRoutes from './routes/gyms'
 import tripRoutes from './routes/trips'
@@ -9,10 +8,9 @@ import weatherRoutes from './routes/weather'
 import authRoutes from './routes/auth'
 import profileRoutes from './routes/profile'
 import visitsRoutes from './routes/visits'
-import placeRoutes from './routes/places'
+import conciergeRoutes from './routes/concierge'
 
 config()
-
 const app = express()
 const PORT = process.env.PORT ?? 3000
 
@@ -34,6 +32,7 @@ app.use('/api/weather', weatherRoutes)
 app.use('/api/auth', authRoutes)
 app.use('/api/profile', profileRoutes)
 app.use('/api/visits', visitsRoutes)
+app.use('/api/concierge', conciergeRoutes)
 
 // Error handler — must be last
 app.use(errorHandler)

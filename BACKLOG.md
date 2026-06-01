@@ -630,3 +630,201 @@ Long session. Three things happened: backend city constraint shipped, mobile onb
 4. Fake door for concierge auto-book — "sort it for me" → waitlist, measure intent rate, no money, no legal surface
 5. Pre-TestFlight cleanup — remove `[Gate]` log, delete orphan onboarding files, empty/error state audit, ToS + Privacy drafts, App Store metadata
 6. TestFlight setup — Apple Developer Program, signing, first build, closed beta with 20-50 users across 3 cities
+
+---
+
+## Day 8 — May 29, 2026 (PM) (Concierge build session 1 — AI shipped end-to-end)
+
+Long session. Built the full concierge loop from zero, then iterated three times in response to real Dan-tests. The AI now plans trips, lists them, deletes them, takes initiative, and uses warm not-apologetic tone.
+
+### Shipped — backend
+
+- `src/routes/concierge.ts` — full endpoint rewrite, multi-iteration agent loop (max 6 iterations, hard cap on cost).
+  - POST /api/concierge/threads — create
+  - GET /api/concierge/threads — list user's chats
+  - GET /api/concierge/threads/:id/messages — full thread w/ hydrated gyms per assistant message
+  - POST /api/concierge/threads/:id/messages — send user msg, run agent loop, persist both messages, return optimistic shape
+- Old `POST /api/concierge` single-shot endpoint deleted.
+- DB schema: `ChatThread` + `ChatMessage` tables added via Supabase SQL editor (direct SQL, RLS enabled w/ no policies — service role bypasses it, fine for this arch). schema.prisma synced + `prisma generate` ran.
+- Conversation history: last 20 messages of a thread sent to Claude per turn. User context (name, home city, primary activity, priorities, recent trips with dates) prepended to the first user message so the AI always knows who it's talking to and what's already planned.
+- Model: `claude-sonnet-4-6`. Tool-use loop. Cost per query ~$0.01-0.03. $5 of credits covers ~200-500 dev queries.
+
+### Shipped — tools (4 total)
+
+1. **searchGyms** — filters by citySlug + day_pass=true, ranks by verified-first then ratingCount. Returns up to 10. Activity, budget (pence), neighborhood all optional.
+2. **saveTrip** — auto-creates Trip + TripLeg with city centroid coords (`src/config/cityCentroids.ts`). Dedupes by overlapping dates so AI can't double-save. Returns `{ deduped: true, tripId }` when matching trip exists.
+3. **listTrips** — reads user's trips + legs, returns date-formatted summary.
+4. **deleteTrip** — verifies ownership via userId match, then `prisma.trip.delete` (cascades to legs via FK).
+5. **respond** — structured-output tool that forces JSON-clean output. Solved the "Claude returns both prose AND code-fenced JSON" bug from earlier iteration — typed args from the SDK, no parsing ambiguity.
+
+### Shipped — system prompt (v3)
+
+- Voice: warm, conversational, never apologetic. Uses name naturally, not every message.
+- Behavior: TAKE ACTION. Save trips on first mention of city+dates, no permission asking. Call searchGyms on first city+activity hint.
+- Honest about unwired capabilities: "Not wired up yet — you can do it from the [Trips/Profile/Passport] tab for now." Explicitly forbids inventing permanent limitations like "I can only see your trip info" which misrepresents the product.
+- City constraint enforced: only London/NYC/Miami. Other cities mentioned plainly without apology.
+
+### Shipped — mobile
+
+- Massive rewrite of `app/(tabs)/home.tsx`. Home IS the chat now. Empty state (greeting + TRY chips) visible only when no messages. Thread view with scrollable history when messages exist. Bottom-anchored input.
+- `src/hooks/useChat.ts` — Provider-style hook (single shared state). Restores latest thread from server on mount, caches active thread ID in AsyncStorage. Optimistic user message rendering. `send` / `newThread` / `loadThread` / `refreshThreads` actions.
+- `src/components/ChatHistorySheet.tsx` — slide-up sheet listing all chats, "+ NEW CHAT" pill at top, active thread tagged "NOW", relative timestamps (just now / 11m ago / 3d ago).
+- `src/components/WaveformIcon.tsx` — already shipped Day 7, now used in 3 places (top bar logo, mic CTA, Home tab icon).
+- Visible "New chat" pill above thread (small action affordance for clearing context without opening history sheet).
+- `app/results.tsx` deleted (replaced by inline chat).
+- Home tab icon → waveform (was home-outline). Brand consistency with logo + mic.
+
+### Behavior verified end-to-end (curl + device)
+
+- "Hey" → warm clarifying question, no Hey-Dan eagerness
+- "I might go to Miami June 2-7 for lifting" → saveTrip called immediately, AI confirms trip saved, then searches gyms
+- Trips tab shows the auto-saved trip
+- "What trips do I have?" → listTrips called, real data returned
+- "Delete the Dubai trip" → AI calls listTrips (gets IDs), then deleteTrip, then confirms. Trip actually gone from DB.
+- Multi-turn context preserved: AI remembered Dubai ID across two turns
+- "Have I got any stamps this month?" → honest "not wired up yet" instead of fake permanent limitation
+- Light + dark mode both render correctly throughout
+
+### Lessons logged
+
+- **`tsx watch` is not infallible.** Server claimed to be running but was running stale code at one point. When AI behavior contradicts the prompt/tool definitions in the file, kill -9 the port and restart. Don't trust hot-reload alone for big file changes.
+- **Curl before tap.** Two cycles this session where I'd ship a change, you'd reload Expo, the device test would fail, and we'd diagnose — only to find the backend never actually had the change deployed. Going forward: curl-verify backend changes BEFORE testing on device. Faster feedback loop, fewer wasted Dan-test conversations.
+- **Big multi-anchor heredocs can fail silently if not pasted cleanly.** First attempt at adding listTrips/deleteTrip tools resulted in `grep -c` returning 0 — the heredoc never ran. Now defaulting to: paste heredoc → verify exits with success message → grep-check it landed → only then test behavior.
+- **The "scope drift in the same session" trap is real and you caught it twice today.** Deferred the floating AI button to its own session, deferred listVisits + updateProfile tools to next concierge session. Discipline > shipping more.
+- **Structured-output tools beat "respond in JSON" prompting.** The `respond` tool moved from "Claude usually emits clean JSON, sometimes wraps in code fences" to "Claude's args are SDK-typed, parser never breaks." Worth the 5 extra lines of tool definition.
+
+### Known issues to fix next concierge session
+
+- **Transient 500s on long threads** — 2 failed sends observed in one device-test session. Re-firing the same prompt via curl 5min later succeeded cleanly. Most likely upstream Anthropic blip or phone network jitter, not a code bug. Action: catch upstream Anthropic errors in the agent loop and retry once before bubbling 500, then surface a "tap to retry" affordance on the failed user-message bubble in mobile. Not blocking.
+- **AI loses tool-call context in long threads** — observed: AI re-called listTrips deep in thread and "apologized" for a deletion it had genuinely done earlier. Root cause: tool results aren't persisted alongside text in ChatMessage, so on rehydration the agent only sees prose history. Fix: add `toolResults JSONB` column to ChatMessage, replay as `tool_result` blocks in subsequent agent runs. Real architectural fix, session 2.
+- **Dedupe-on-update is wrong behavior.** When user updates trip dates ("actually June 3-8 not 2-7"), saveTrip returns `deduped: true` and AI surfaces internal language ("the system has your original dates locked in and flagged as duplicate"). Right behavior: detect date update intent → delete old trip + create new one transparently, or call `updateTrip` (not yet a tool).
+- **No streaming.** "Thinking…" placeholder shown while AI processes, but full reply only appears once complete. Adds 3-8s perceived latency vs streaming. Sessions 4-5 territory.
+- **`listVisits` / `updateProfile` / `addGymToTrip` not yet tools.** AI politely admits this now, but users will keep asking. Add when value:effort right.
+- **FAB across screens deferred.** Currently chat only reachable via Home tab. v1.1 backlog.
+
+### Files touched
+
+- `packages/api/src/routes/concierge.ts` — new + 3 major rewrites
+- `packages/api/src/config/cityCentroids.ts` — new
+- `packages/api/prisma/schema.prisma` — ChatThread + ChatMessage + User.chatThreads relation
+- `app/(tabs)/home.tsx` — full rewrite (chat surface)
+- `app/(tabs)/_layout.tsx` — Home icon → waveform
+- `app/results.tsx` — deleted
+- `src/hooks/useChat.ts` — new
+- `src/components/ChatHistorySheet.tsx` — new
+- `packages/api/package.json` — `@anthropic-ai/sdk` added
+
+### Pre-existing issues still open (carried)
+
+- Prisma drift on Supabase extensions
+- `tsconfig.json` `moduleResolution: bundler` blocks `tsc --noEmit`
+- Prisma 5.22 → 7 upgrade available, hold off
+- `[Gate]` console.log in `app/_layout.tsx` (Phase 5)
+- Orphan onboarding files `lifestyle/budget/training/facilities` (Phase 5)
+- `API_BASE` hardcoded in 5+ mobile files — move to single env var (Phase 5)
+
+---
+
+## What's next (priority order)
+
+### Next session (pick one)
+1. **Concierge session 2 polish** — diagnose the 500s, fix the dedupe-on-update bug (likely add `updateTrip` tool), add `listVisits` tool, swap "Thinking…" for a better loading state.
+2. **Match route DB-first flip** — PostGIS `ST_DWithin`, verified gyms first, Google fallback. Unblocks the manual verification work.
+3. **Floating AI FAB across screens** — modal-overlay pattern from this session's locked scope.
+
+### Founder weekend work (no Claude session)
+- Backfill `citySlug` on 290 existing gyms (london-gb / newyork-us / miami-us; Nottingham → null or delete)
+- Manual verification of ~300 gyms across 3 cities: dayPass, dayPassPence, dayPassUrl, equipmentTags, verified=true
+
+### Sessions after that
+4. AI concierge session 3-4 (streaming, addGymToTrip tool, full trip-edit tool surface)
+5. Fake door for concierge auto-book — measure intent rate, no money, no legal
+6. Pre-TestFlight cleanup — remove `[Gate]` log, delete orphan onboarding files, error states, ToS/Privacy, App Store metadata, single API_BASE env var
+7. TestFlight setup — Apple Developer Program, signing, first build, closed beta 20-50 users in 3 cities
+
+## Day 9 — June 1, 2026 (Concierge session 2 — tool persistence, smart saveTrip, listVisits, retry, loading copy)
+
+Six-step session, all shipped, end-to-end verified (curl + device).
+
+### Shipped — tool result persistence (architectural fix from Day 8)
+
+- New `tool_results` JSONB column on `chat_messages` (direct SQL via Supabase, schema.prisma synced, prisma generate ran). Stores per-turn `{assistantContent, toolResults}` arrays so tool_use + tool_result blocks survive thread rehydration.
+- `runAgent` in `concierge.ts` now accumulates `ToolTurn[]` across iterations and returns them in `AgentResult`. POST `/threads/:id/messages` persists `toolTurns` on the assistant `ChatMessage`. GET rebuild interleaves `assistant(tool_use)` + `user(tool_result)` blocks from history before the final assistant text.
+- Verified: thread with a `listTrips` call → "What was the ID of the NY trip?" → AI answered exact UUID, no re-call. Then "Delete the New York one." → AI called `deleteTrip` directly with the right ID, no clarifying re-list. Day 8's "AI loses tool-call context in long threads" bug is fixed.
+
+### Shipped — smart saveTrip
+
+- `saveTripImpl` returns `action: 'created' | 'updated' | 'noop'` instead of `deduped: true/false`. Overlap detection updates the existing `TripLeg` in place via `$transaction` rather than refusing to act.
+- System prompt + tool description rewritten to teach the AI about the new response shape, including handling date-change requests by calling `saveTrip` again.
+- Verified: "Save Miami June 20-23" → created. "Actually make it June 22-25" → updated in place (no duplicate row, no leaky "system deduplicated" language). AI prose clean: "Done — dates updated to June 22-25, Dan."
+
+### Shipped — deleteTrip hardening (uncovered + fixed mid-session)
+
+- The first smart-saveTrip test revealed a NEW bug: persisted toolResults showed Claude calling BOTH `saveTrip` and `deleteTrip` in the same turn on the just-saved trip. Preamble text claimed it was running saveTrip + searchGyms in parallel, but the actual second tool was deleteTrip. The new trip was correctly created and updated, then immediately deleted.
+- Root cause: nothing in the system prompt constrained `deleteTrip` to explicit user delete intent. Tool selection misfired during parallel tool calls.
+- Fix: prompt-level — hard rule that `deleteTrip` only fires on explicit user delete words ("delete", "remove", "cancel", "drop", "get rid of"). Date changes, updates, edits are NEVER deletes. Plus the tool description itself now says "Do NOT call alongside saveTrip in the same turn."
+- Verified post-fix: same test sequence produced zero `deleteTrip` calls. Two Miami trips in DB (untouched June 3-8, updated June 22-25).
+
+### Shipped — listVisits tool
+
+- New `listVisitsImpl` reads from `GymAccess` joined to `Gym`, returns up to 50 most-recent visits with gym name, address, citySlug, accessType, status (pending/confirmed/denied), visitedAt, confirmedAt. Shape mirrors the existing `/api/visits/all` route.
+- Tool definition added to TOOLS, dispatch case added to agent loop, system prompt's capabilities list updated: "list the user's gym visits (passport stamps)" moved from "cannot yet" to "can".
+- Verified: "Have I logged any gym visits yet?" → AI calls `listVisits`, gets empty array, replies honestly ("No stamps yet, Dan — your passport is blank!"). No "not wired up yet" leak.
+
+### Shipped — retry on upstream Anthropic errors
+
+- Backend: new `callAnthropicWithRetry` helper wraps `anthropic.messages.create`. `isTransientUpstreamError` returns true for 5xx, 429, and network errors (ETIMEDOUT/ECONNRESET/ECONNREFUSED/EAI_AGAIN, APIConnectionError, APIConnectionTimeoutError). On transient failure: 500ms sleep, retry once, then bubble. Wrap is inside the loop iteration — non-transient errors throw immediately, retries don't re-execute tools.
+- Mobile: `ChatMessage` now has optional `failed?: boolean`. The send catch branch sets `failed: true` on the optimistic bubble instead of mutating the message content. New `retrySend(messageId)` removes the failed bubble and re-calls `send` with the original content.
+- `MessageBlock` renders failed user bubbles at 55% opacity with a "Failed — tap to retry" link below in accent green.
+- Verified on device: airplane mode mid-send → bubble fades, retry link appears. Toggle back on, tap retry → message resends successfully.
+
+### Shipped — rotating loading copy
+
+- New `useLoadingCopy(active)` hook rotates through ['Thinking…', 'Checking your trips…', 'Searching gyms…', 'Pulling it together…'] every 2.5s while sending. Resets to index 0 when inactive.
+- Replaces the static "Thinking…" in the sending JSX block. No backend dependency — this is the cheap version. Real per-tool streaming is concierge session 3.
+- Verified on device: copy cycles smoothly during agent runs (3-8s typical).
+
+### Lessons logged
+
+- **Persisted tool results aren't just for context preservation — they're also the debugger.** Without `tool_results` in the DB, the speculative-deleteTrip bug would have looked like a Prisma or transaction issue. Reading the actual tool calls Claude made revealed the cause in 30 seconds. This pattern (persist the agent's reasoning trace, read it on bug reports) will keep paying off.
+- **Heredoc patches that write the file only at the END are dangerous when multi-anchor.** If any anchor fails mid-script, ALL prior in-memory replaces are lost AND there's no visible diff. Twice today a partial patch left the file in an inconsistent state (loading copy hook called but not declared). Going forward: write the file after each anchor (or fail fast with intermediate writes), or split multi-anchor patches into single-anchor scripts.
+- **The placeholder-substitution pattern in Claude's instructions (`PASTE_REAL_UUID_HERE`) kept tripping the workflow.** Multiple curls failed because the literal placeholder string was exported as the variable. Going forward: every command Claude provides ships with real values prefilled from the most recent tool output, no `PASTE_X` markers.
+- **`tsx watch` keeps biting** — multiple times today the watcher claimed reloaded but ran stale code. Default: kill the port and restart on every nontrivial backend edit. Five seconds of restart > debugging stale-code phantoms.
+- **Trusting the model's preamble text is wrong** — Claude said "I'll save and search for gyms" while actually calling save + delete. Audit toolResults, not assistant prose, when diagnosing weird behavior.
+
+### Files touched
+
+- `packages/api/prisma/schema.prisma` — `toolResults Json?` on ChatMessage
+- `packages/api/src/routes/concierge.ts` — full `runAgent` rewrite (persistence + replay), `saveTripImpl` smart-save, `listVisitsImpl` added, `callAnthropicWithRetry` wrapper, deleteTrip prompt hardening, system prompt capabilities updated, tool descriptions tightened
+- Supabase: `ALTER TABLE chat_messages ADD COLUMN tool_results JSONB` via SQL editor
+- `fitroam-mobile/src/hooks/useChat.ts` — `failed?: boolean` on ChatMessage, `retrySend` function exported, failure branch stops mutating content
+- `fitroam-mobile/app/(tabs)/home.tsx` — `useLoadingCopy` hook, MessageBlock signature accepts onRetry, failed user bubbles render retry affordance, loading text rotates
+
+### Pre-existing issues still open (carried)
+
+- Prisma drift on Supabase extensions
+- `tsconfig.json` `moduleResolution: bundler` blocks `tsc --noEmit` as CI check
+- Prisma 5.22 → 7 upgrade available (do NOT do mid-build)
+- `[Gate]` console.log in `app/_layout.tsx` (Phase 5)
+- Orphan onboarding files `lifestyle/budget/training/facilities` (Phase 5)
+- `API_BASE` hardcoded in 5+ mobile files (Phase 5)
+
+---
+
+## What's next (priority order)
+
+### Next session — pick one
+1. **Concierge session 3 — streaming** — Server-Sent Events from backend, mobile reads stream, per-tool status updates ("Searching gyms…", "Saving your trip…") instead of the cheap rotating copy. The proper version of what Day 9 step 6 stubbed in.
+2. **Match route DB-first flip** — PostGIS `ST_DWithin` against existing lat/lng, verified gyms ranked first, Google as fallback for thin areas. Unblocks the weekend verification work meaning anything at runtime.
+3. **Floating AI FAB across Trips/Profile screens** — modal-overlay pattern, makes the chat reachable from non-Home tabs.
+
+### Founder weekend work (no Claude session)
+- Backfill `citySlug` on 290 existing gyms (london-gb / newyork-us / miami-us; Nottingham → null or delete)
+- Manual verification of ~300 gyms across 3 cities: dayPass, dayPassPence, dayPassUrl, equipmentTags, verified=true
+
+### Sessions after that
+4. Concierge session 4 — `addGymToTrip` tool, full trip-edit surface
+5. Concierge session 5 — trust patterns, edge cases, error states in the chat
+6. Fake door for concierge auto-book — measure intent rate, no money, no legal
+7. Pre-TestFlight cleanup — remove `[Gate]` log, delete orphan onboarding files, error states, ToS/Privacy, App Store metadata, single API_BASE env var
+8. TestFlight setup — Apple Developer Program, signing, first build, closed beta 20-50 users in 3 cities
