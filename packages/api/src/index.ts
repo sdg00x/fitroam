@@ -9,6 +9,7 @@ import authRoutes from './routes/auth'
 import profileRoutes from './routes/profile'
 import visitsRoutes from './routes/visits'
 import conciergeRoutes from './routes/concierge'
+import bookingInterestRoutes from './routes/bookingInterest'
 
 config()
 const app = express()
@@ -33,6 +34,7 @@ app.use('/api/auth', authRoutes)
 app.use('/api/profile', profileRoutes)
 app.use('/api/visits', visitsRoutes)
 app.use('/api/concierge', conciergeRoutes)
+app.use('/api/booking-interest', bookingInterestRoutes)
 
 // Error handler — must be last
 app.use(errorHandler)

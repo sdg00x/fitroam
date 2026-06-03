@@ -27,6 +27,13 @@ You are an agent, not a chatbot. The user came here for results, not conversatio
 - Never ask permission to do something. Just do it and tell the user what you did.
 - Never ask "want me to..." or "should I..." when you have enough info. Just do it.
 
+BOOKING / "SORT IT FOR ME"
+- FitRoam can record interest in handling a day-pass booking on the user's behalf for £2.99 per pass. This is a real product offering, currently waitlist-only — we will contact them to arrange it. Use the recordBookingInterest tool.
+- NEVER offer this proactively or in passing. Wait for the user to ask using phrases like "sort it for me", "book it", "handle it", "can you sort that out", "I don't want to deal with it".
+- When recording: confirm the gym (must be a verified DB gym — Google-fallback gyms cannot be booked) and confirm the user's email. If you don't have their email from prior context, ask for it in conversation BEFORE calling recordBookingInterest.
+- After recording, confirm naturally: e.g. "Done — we'll be in touch to sort your Equinox Brickell pass. £2.99 per pass." Do NOT promise immediate booking or a specific timeframe.
+- If the gym is a google-fallback (no UUID), say plainly that you can only handle bookings for gyms in your verified network, and suggest a verified alternative if one fits.
+
 VOICE
 - Conversational and warm, like a friend who travels constantly and knows every gym scene.
 - Don't be terse to the point of feeling robotic, and don't ramble. 1-4 sentences usually. Match the user's energy.
@@ -46,8 +53,8 @@ WHEN searchGyms RETURNS NOTHING
 - If nothing fits and the user just wants a plan, save the trip anyway so they don't lose context.
 
 WHEN THE USER ASKS FOR SOMETHING YOU CAN'T DO
-- You can: search gyms, save/update trips, list saved trips, delete trips, list the user's gym visits (passport stamps).
-- You cannot (YET): mark NEW visits, edit profile, save individual gyms to a trip. These will come.
+- You can: search gyms, save/update trips, list saved trips, delete trips, list the user's gym visits (passport stamps), attach a gym to a saved trip, remove a gym from a saved trip, record interest in FitRoam handling a booking on their behalf.
+- You cannot (YET): mark NEW visits, edit profile. These will come.
 - If asked for something outside your tools, be honest and short: "Not wired up yet — you can do it from the [Trips/Profile/Passport] tab for now." Don't invent permanent limitations like "I only have your trip info" — that misrepresents the product. The capability is coming; for now the user does it elsewhere in the app.
 
 OUTPUT
@@ -125,6 +132,45 @@ const TOOLS: Anthropic.Messages.Tool[] = [
         tripId: { type: 'string', description: 'The UUID of the trip to delete (from listTrips results).' },
       },
       required: ['tripId'],
+    },
+  },
+  {
+    name: 'addGymToTrip',
+    description: "Attach a gym to one of the user's saved trips. Use after searchGyms when the user picks a gym (e.g. 'save the first one to my Miami trip') or when context makes it obvious which trip is meant. Call listTrips first if you don't know the tripId.",
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        tripId: { type: 'string', description: 'UUID of the trip from listTrips or saveTrip.' },
+        gymId: { type: 'string', description: 'UUID of the gym from searchGyms. Only verified DB gyms (UUIDs) work — google-fallback gyms cannot be attached.' },
+        legId: { type: 'string', description: 'Optional UUID of a specific trip leg. Omit if attaching at trip level.' },
+        notes: { type: 'string', description: "Optional short note about why this gym (e.g. 'best lifting in Brickell')." },
+      },
+      required: ['tripId', 'gymId'],
+    },
+  },
+  {
+    name: 'removeGymFromTrip',
+    description: "Detach a gym from a saved trip. Only use on explicit user request (e.g. 'remove the Equinox from my Miami trip'). Call listTrips first to get tripId and to confirm the gym is attached.",
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        tripId: { type: 'string' },
+        gymId: { type: 'string' },
+      },
+      required: ['tripId', 'gymId'],
+    },
+  },
+  {
+    name: 'recordBookingInterest',
+    description: "Record that the user wants FitRoam to handle buying a day pass on their behalf. This is a fake-door test — we do NOT actually book anything. Use ONLY when the user explicitly says they want us to 'sort it', 'book it', 'handle it', or similar. The price is £2.99 per pass. Confirm the user's email in conversation first if you don't already have it from context.",
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        gymId: { type: 'string', description: 'UUID of the verified gym they want booked. Google-fallback gyms cannot be booked.' },
+        email: { type: 'string', description: "User's email for the waitlist confirmation." },
+        tripId: { type: 'string', description: 'Optional UUID of the related trip.' },
+      },
+      required: ['gymId', 'email'],
     },
   },
   {
@@ -418,6 +464,140 @@ function getUserId(req: Request): string | null {
   return typeof id === 'string' && id.length ? id : null
 }
 
+async function addGymToTripImpl(
+  userId: string,
+  args: { tripId: string; gymId: string; legId?: string; notes?: string },
+) {
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!UUID_RE.test(args.gymId)) {
+    return { ok: false, error: "gymId must be a verified DB gym UUID. Google-fallback gyms cannot be attached." };
+  }
+  if (!UUID_RE.test(args.tripId)) {
+    return { ok: false, error: "tripId must be a valid UUID." };
+  }
+
+  // Ownership check
+  const trip = await prisma.trip.findFirst({
+    where: { id: args.tripId, userId },
+    select: { id: true },
+  });
+  if (!trip) return { ok: false, error: "Trip not found or not owned by user." };
+
+  // Gym existence check
+  const gym = await prisma.gym.findUnique({
+    where: { id: args.gymId },
+    select: { id: true, name: true },
+  });
+  if (!gym) return { ok: false, error: "Gym not found in verified DB." };
+
+  // Optional leg check — must belong to this trip
+  if (args.legId) {
+    if (!UUID_RE.test(args.legId)) return { ok: false, error: "legId must be a valid UUID." };
+    const leg = await prisma.tripLeg.findFirst({
+      where: { id: args.legId, tripId: args.tripId },
+      select: { id: true },
+    });
+    if (!leg) return { ok: false, error: "Leg not found on this trip." };
+  }
+
+  // Dedupe: same gym + same trip + same legId already attached?
+  const existing = await prisma.tripGym.findFirst({
+    where: {
+      tripId: args.tripId,
+      gymId: args.gymId,
+      legId: args.legId ?? null,
+    },
+    select: { id: true },
+  });
+  if (existing) {
+    return { ok: true, action: "noop", tripGymId: existing.id, gymName: gym.name };
+  }
+
+  const created = await prisma.tripGym.create({
+    data: {
+      tripId: args.tripId,
+      gymId: args.gymId,
+      legId: args.legId ?? null,
+      matchScore: 0, // AI-attached gyms don't go through match engine in v1
+      notes: args.notes ?? null,
+    },
+    select: { id: true },
+  });
+
+  return { ok: true, action: "created", tripGymId: created.id, gymName: gym.name };
+}
+
+async function removeGymFromTripImpl(
+  userId: string,
+  args: { tripId: string; gymId: string },
+) {
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!UUID_RE.test(args.tripId) || !UUID_RE.test(args.gymId)) {
+    return { ok: false, error: "tripId and gymId must be valid UUIDs." };
+  }
+
+  // Ownership check via trip
+  const trip = await prisma.trip.findFirst({
+    where: { id: args.tripId, userId },
+    select: { id: true },
+  });
+  if (!trip) return { ok: false, error: "Trip not found or not owned by user." };
+
+  const result = await prisma.tripGym.deleteMany({
+    where: { tripId: args.tripId, gymId: args.gymId },
+  });
+
+  if (result.count === 0) {
+    return { ok: false, error: "That gym is not attached to this trip." };
+  }
+  return { ok: true, removed: result.count };
+}
+
+async function recordBookingInterestImpl(
+  userId: string,
+  args: { gymId: string; email: string; tripId?: string },
+) {
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!UUID_RE.test(args.gymId)) {
+    return { ok: false, error: "gymId must be a verified DB gym UUID." };
+  }
+  if (!args.email || !args.email.includes("@")) {
+    return { ok: false, error: "A valid email is required." };
+  }
+  if (args.tripId && !UUID_RE.test(args.tripId)) {
+    return { ok: false, error: "tripId must be a valid UUID if provided." };
+  }
+
+  const gym = await prisma.gym.findUnique({
+    where: { id: args.gymId },
+    select: { id: true, name: true },
+  });
+  if (!gym) return { ok: false, error: "Gym not found." };
+
+  if (args.tripId) {
+    const trip = await prisma.trip.findFirst({
+      where: { id: args.tripId, userId },
+      select: { id: true },
+    });
+    if (!trip) return { ok: false, error: "Trip not found or not owned by user." };
+  }
+
+  const created = await prisma.bookingInterest.create({
+    data: {
+      userId,
+      gymId: args.gymId,
+      tripId: args.tripId ?? null,
+      email: args.email.trim().toLowerCase(),
+      pricePence: 299,
+      source: "ai_chat",
+      status: "waitlisted",
+    },
+    select: { id: true },
+  });
+
+  return { ok: true, bookingInterestId: created.id, gymName: gym.name, pricePence: 299 };
+}
+
 async function loadUserContext(userId: string): Promise<string> {
   const [user, profile, recentTrips] = await Promise.all([
     prisma.user.findUnique({ where: { id: userId } }),
@@ -561,6 +741,12 @@ async function runAgent(
         result = await listVisitsImpl(userId)
       } else if (tu.name === 'deleteTrip') {
         result = await deleteTripImpl(userId, tu.input as any)
+      } else if (tu.name === 'addGymToTrip') {
+        result = await addGymToTripImpl(userId, tu.input as any)
+      } else if (tu.name === 'removeGymFromTrip') {
+        result = await removeGymFromTripImpl(userId, tu.input as any)
+      } else if (tu.name === 'recordBookingInterest') {
+        result = await recordBookingInterestImpl(userId, tu.input as any)
       } else {
         result = { error: `Unknown tool: ${tu.name}` }
       }

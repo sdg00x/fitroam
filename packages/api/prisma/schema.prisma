@@ -27,6 +27,7 @@ model User {
 
   chatThreads  ChatThread[]
   @@map("users")
+  bookingInterests BookingInterest[]
 }
 
 model UserProfile {
@@ -79,6 +80,7 @@ model Gym {
   gymAccess    GymAccess[]
 
   @@map("gyms")
+  bookingInterests BookingInterest[]
 }
 
 model PriceReport {
@@ -202,6 +204,7 @@ model Trip {
 
   @@index([userId])
   @@map("trips")
+  bookingInterests BookingInterest[]
 }
 
 model TripLeg {
@@ -285,4 +288,25 @@ model ChatMessage {
   @@index([threadId])
   @@index([threadId, createdAt])
   @@map("chat_messages")
+}
+
+model BookingInterest {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  tripId          String?  @map("trip_id") @db.Uuid
+  gymId           String   @map("gym_id") @db.Uuid
+  email           String
+  pricePence      Int      @map("price_shown_pence")
+  source          String   @default("gym_card")
+  status          String   @default("waitlisted")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trip Trip? @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  gym  Gym   @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([gymId])
+  @@index([createdAt(sort: Desc)])
+  @@map("booking_interest")
 }
