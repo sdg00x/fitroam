@@ -78,23 +78,37 @@ See `PRODUCT_v5.md` and `BUILD_STATUS_v2.md` for the full reasoning.
 
 ---
 
-## v1.1 backlog (post-launch)
+## v1.1 backlog (post-launch — small upgrades, no architectural changes)
 
-- Routes-as-viewing (deferred from v1 — Day 4)
-  - 3-5 popular routes per city from OSM
-  - View-only, no tracking/creation/social/GPX
-  - Display on Trip Detail
-  - AI concierge route recommendation tool
-- Manual pricing layer for top 50-100 gyms per launch city (contractor work)
-- AI concierge price-on-demand via web fetch (Phase 2)
+**Auth & security**
+- Magic codes for auth (replace email-only signin). Required before any public release. (Day 4)
+
+**Concierge polish**
+- Streaming responses (proper SSE, per-tool status text). `react-native-sse` already installed. (Day 9, 10)
+- Concierge session 5 — trust patterns, edge cases, error states in chat. Wait until 20-50 testers reveal what to harden. (Day 9)
+- Voice input wiring (Expo Speech). Mic icon present but inert. (Day 7)
+- Conversation threading on prompt screen (each query currently fresh, no cross-thread continuity). (Day 6)
+
+**Mobile UX**
+- Floating AI FAB across Trips/Profile screens. Currently chat only reachable via Home tab. (Day 8)
+
+**Content & data**
+- Routes-as-viewing — 3-5 popular routes per city from OSM. View-only, no tracking/creation/social/GPX. Display on Trip Detail. AI concierge route recommendation tool. (Day 4)
+- Manual pricing layer expanded to top 50-100 gyms per launch city (contractor work). (Day 4)
+- AI concierge price-on-demand via web fetch. (Day 4)
+
+**Distribution**
+- External TestFlight (public links, 10k testers). Requires Apple App Review on first build. (Day 10)
+- Play Store public listing. (Day 10)
 
 ## v1.2 backlog
 
-- Strava integration (passport bridge, AI awareness)
-- User-generated content (gym reviews, categories, experiences) — gated on user base
+- 4th launch city (post-PMF signal)
 - Pilates / Yoga support (different match logic)
+- User-generated content (gym reviews, categories, experiences) — gated on user base
+- Strava integration (passport bridge, AI awareness)
 
-## v2 backlog (North Star)
+## v2 backlog (North Star — requires gym partnerships)
 
 - Transactional booking layer with partnered gym chains
 - Walk-in temporary access (the original product vision)
@@ -828,3 +842,207 @@ Six-step session, all shipped, end-to-end verified (curl + device).
 6. Fake door for concierge auto-book — measure intent rate, no money, no legal
 7. Pre-TestFlight cleanup — remove `[Gate]` log, delete orphan onboarding files, error states, ToS/Privacy, App Store metadata, single API_BASE env var
 8. TestFlight setup — Apple Developer Program, signing, first build, closed beta 20-50 users in 3 cities
+
+## Day 10 — June 3, 2026 (Match route DB-first flip — unblocks weekend verification)
+
+Single-focus session. Streaming was briefly attempted then abandoned mid-stream when scope clarity (TestFlight > polish) re-prioritised. Pivoted to the match route flip, which is the higher-leverage prerequisite to the weekend gym-verification work.
+
+### Shipped — searchGymsImpl rewritten for radius + neighborhood + fallback
+
+- New `src/config/neighborhoodCentroids.ts` — 15 neighborhoods (Soho/Shoreditch/Mayfair/Kensington/Canary Wharf for London; Midtown/Soho/Brooklyn/Williamsburg/Upper East Side for NYC; Brickell/Wynwood/South Beach/Miami Beach/Midtown Miami for Miami). Forgiving lookup: lowercase, strip punctuation, exact + substring match, city-slug-scoped.
+- `searchGymsImpl` no longer uses `prisma.gym.findMany`. New shape:
+  1. Determine search center: neighborhood centroid (if AI provided one and we know it) else city centroid.
+  2. Raw SQL with PostGIS `ST_DWithin` filter, 5km radius from center, `city_slug` match, optional budget guard (`day_pass_pence IS NULL OR ≤ budget`).
+  3. Order: verified DESC, day_pass DESC, rating_count DESC NULLS LAST (moat first → day-pass-available next → popular).
+  4. Limit 10.
+- If DB returns zero results: fall back to `placesService.fetchNearbyGyms(center.lat, center.lng, 5000)`, tag each as `verified: false`, return as `source: 'google-fallback'`. AI's system prompt teaches it to caveat unverified results ("call ahead about day passes").
+- Tool description updated to teach AI about `source: verified-db | google-fallback | empty` and how to phrase each.
+
+### Shipped — UUID filter for chat persistence
+
+- Google fallback returns Google Place IDs (not UUIDs). Without filtering, the agent loop's `chatMessage.create` crashed on `gymIds` (UUID-typed column) and `hydrateGyms` choked on the same IDs.
+- Fix: regex filter on `parsed.gymIds` before persisting + before hydrating. `persistableGymIds = parsed.gymIds.filter(id => UUID_RE.test(id))`. Google gyms still get mentioned by the AI in prose; just don't get persisted as gym cards.
+- Architectural reason this is the right call (not "make hydrateGyms forgiving"): keeps the DB as the verified moat. Google fallback gyms don't have day-pass URLs / verified equipment tags / a known price, so they shouldn't render as proper cards. Tappable cards = verified gyms only.
+
+### Verified end-to-end
+
+Three curl-based tests, all green:
+
+1. **Empty-DB Miami (Brickell)** → `source: google-fallback`, AI returned 10 real Google gyms with explicit "call ahead" caveat. `PERSISTED gymIds: null` (correctly filtered out).
+2. **Empty-DB London (Canary Wharf)** → `source: google-fallback`, neighborhood centroid resolved, AI returned 10 Canary Wharf gyms with caveat.
+3. **One verified Miami gym (Equinox Brickell flipped manually)** → `source: verified-db`, AI surfaced "Equinox Brickell on 1441 Brickell Ave... day passes available at £40 a pop." UUID persisted to `gymIds`, full payload returned to mobile (address, dayPassPence, dayPassUrl, equipmentTags, photoUrls). Reverted after test.
+
+### Architectural decisions logged
+
+- **DB is the verified moat, Google is the fallback for unverified gaps.** Google results never get persisted to the gyms table — keeps provenance clean (every row in `gyms` with `verified: false` was put there by a real audit, not auto-pulled from a user query).
+- **Day-pass is a soft preference, not a hard filter.** Verified-but-day-pass-unknown gyms still surface (ranked lower) so the AI can mention them.
+- **Equipment filtering deferred to the match engine downstream**, not at the searchGyms tool layer. One source of truth for activity→equipment mapping.
+- **Currency: store everything in pence-equivalent integers, decide currency in display logic by city.** Miami $40 = `dayPassPence: 4000`. Mobile/prompt decides whether to render as £40 / $40 / €40 based on currency.
+
+### Lessons logged
+
+- **Streaming is polish, not a TestFlight blocker.** Spent ~30 minutes scoping SSE + ReadableStream + WebSocket trade-offs before catching that "I want to get to TestFlight soon" doesn't match "let me build SSE infrastructure." The path to TestFlight is: data quality (this session) → manual verification (weekend) → cleanup → Apple Dev signup → first signed build. Streaming is none of those.
+- **The first verified-path test failed with a fake explanation.** I assumed Claude was re-using cached results from conversation history when really the test was broken (placeholder UUID exported as literal again). Pattern: when the AI does something unexpected, audit `toolResults` BEFORE theorising about prompt behavior. Tool calls don't lie.
+- **zsh history expansion eats `!` in node -e commands.** Twice this session. Either pre-set `set +H` for the session, or rewrite logical-not checks as equality (`if (m === undefined)`). Single-quoting doesn't help — zsh expands history before quote processing.
+- **The PASTE_X placeholder anti-pattern from yesterday returned with a vengeance today.** Lost ~15 minutes to it across three iterations. Going forward, every command Claude provides ships with real values prefilled from the most recent output, no placeholder substitution required.
+
+### Pre-existing issues still open (carried)
+
+- Prisma drift on Supabase extensions
+- `tsconfig.json` `moduleResolution: bundler` blocks `tsc --noEmit` as CI check
+- Prisma 5.22 → 7 upgrade available (do NOT do mid-build)
+- `[Gate]` console.log in `app/_layout.tsx` (Phase 5)
+- Orphan onboarding files `lifestyle/budget/training/facilities` (Phase 5)
+- `API_BASE` hardcoded in 5+ mobile files (Phase 5)
+- `react-native-sse` installed on mobile but unused (left from abandoned streaming start). Either ship streaming in session 3 of concierge work, or `npm uninstall react-native-sse` in Phase 5 cleanup.
+
+### Files touched
+
+- `packages/api/src/config/neighborhoodCentroids.ts` — NEW (15 neighborhoods, `findNeighborhood` lookup)
+- `packages/api/src/routes/concierge.ts` — `searchGymsImpl` body rewritten (PostGIS radius + neighborhood + Google fallback), tool description updated, UUID filter (`persistableGymIds`) added at chatMessage.create + hydrateGyms call sites
+- `fitroam-mobile/package.json` + lockfile — `react-native-sse` installed (unused after streaming pivot, see open issues)
+
+---
+
+## What's next (priority order)
+
+### Founder weekend work (no Claude session — UNBLOCKED BY TODAY)
+- Backfill `citySlug` on existing gyms (london-gb / newyork-us / miami-us; Nottingham → null or delete)
+- Manual verification of ~300 gyms across 3 cities. For each: `verified=true`, `verifiedAt=now()`, `dayPass=true/false`, `dayPassPence` (USD ×100 for US, GBP ×100 for UK, single integer column), `dayPassUrl` (deep link to gym's day-pass purchase page), `equipmentTags` array. Now every verified gym surfaces in the AI with a real CTA instead of falling through to Google.
+
+### Next session — pick one
+1. **Floating AI FAB across Trips/Profile screens** — small mobile-only session, makes chat reachable from non-Home tabs.
+2. **Pre-TestFlight cleanup + Apple Dev Program signup** — boring but Apple approval takes a few business days, START NOW. Cleanup: remove `[Gate]` log, delete orphan onboarding files, single `API_BASE` env var, ToS/Privacy drafts, App Store metadata.
+3. **Concierge session 3 — proper streaming** — defer until after TestFlight, BUT `react-native-sse` is already installed if we choose to circle back.
+
+### Sessions after that
+4. Concierge session 4 — `addGymToTrip` tool, full trip-edit surface
+5. Concierge session 5 — trust patterns, edge cases, error states in chat
+6. Fake door for concierge auto-book — measure intent rate, no money, no legal
+7. TestFlight setup — first signed build, closed beta 20-50 users in 3 cities
+
+## Day 10 — June 3, 2026 (Match route DB-first flip — unblocks weekend verification)
+
+Single-focus session. Streaming was briefly attempted then abandoned mid-stream when scope clarity (TestFlight > polish) re-prioritised. Pivoted to the match route flip, which is the higher-leverage prerequisite to the weekend gym-verification work.
+
+### Shipped — searchGymsImpl rewritten for radius + neighborhood + fallback
+
+- New `src/config/neighborhoodCentroids.ts` — 15 neighborhoods (Soho/Shoreditch/Mayfair/Kensington/Canary Wharf for London; Midtown/Soho/Brooklyn/Williamsburg/Upper East Side for NYC; Brickell/Wynwood/South Beach/Miami Beach/Midtown Miami for Miami). Forgiving lookup: lowercase, strip punctuation, exact + substring match, city-slug-scoped.
+- `searchGymsImpl` no longer uses `prisma.gym.findMany`. New shape:
+  1. Determine search center: neighborhood centroid (if AI provided one and we know it) else city centroid.
+  2. Raw SQL with PostGIS `ST_DWithin` filter, 5km radius from center, `city_slug` match, optional budget guard (`day_pass_pence IS NULL OR <= budget`).
+  3. Order: verified DESC, day_pass DESC, rating_count DESC NULLS LAST (moat first -> day-pass-available next -> popular).
+  4. Limit 10.
+- If DB returns zero results: fall back to `placesService.fetchNearbyGyms(center.lat, center.lng, 5000)`, tag each as `verified: false`, return as `source: 'google-fallback'`. AI system prompt teaches it to caveat unverified results ("call ahead about day passes").
+- Tool description updated to teach AI about `source: verified-db | google-fallback | empty` and how to phrase each.
+
+### Shipped — UUID filter for chat persistence
+
+- Google fallback returns Google Place IDs (not UUIDs). Without filtering, `chatMessage.create` crashed on `gymIds` (UUID-typed column) and `hydrateGyms` choked on the same IDs.
+- Fix: regex filter on `parsed.gymIds` before persisting + before hydrating. Google gyms still get mentioned by the AI in prose; just don't get persisted as gym cards.
+- Architectural reason: keeps the DB as the verified moat. Google fallback gyms don't have day-pass URLs / verified equipment tags / a known price, so they shouldn't render as proper cards. Tappable cards = verified gyms only.
+
+### Verified end-to-end
+
+Three curl-based tests, all green:
+1. **Empty-DB Miami (Brickell)** -> `source: google-fallback`, AI returned 10 real Google gyms with explicit "call ahead" caveat. `PERSISTED gymIds: null` (correctly filtered out).
+2. **Empty-DB London (Canary Wharf)** -> `source: google-fallback`, neighborhood centroid resolved, AI returned 10 Canary Wharf gyms with caveat.
+3. **One verified Miami gym (Equinox Brickell flipped manually)** -> `source: verified-db`, AI surfaced "Equinox Brickell on 1441 Brickell Ave... day passes available at £40 a pop." UUID persisted to `gymIds`, full payload returned to mobile (address, dayPassPence, dayPassUrl, equipmentTags, photoUrls). Reverted after test.
+
+### Architectural decisions logged
+
+- **DB is the verified moat, Google is the fallback for unverified gaps.** Google results never get persisted to the gyms table.
+- **Day-pass is a soft preference, not a hard filter.** Verified-but-day-pass-unknown gyms still surface (ranked lower).
+- **Equipment filtering deferred to the match engine downstream**, not at the searchGyms tool layer.
+- **Currency: store everything in pence-equivalent integers, decide currency in display logic by city.**
+
+### Lessons logged
+
+- **Streaming is polish, not a TestFlight blocker.** "I want to get to TestFlight soon" doesn't match "let me build SSE infrastructure."
+- **The first verified-path test failed with a fake explanation.** When the AI does something unexpected, audit `toolResults` BEFORE theorising about prompt behavior. Tool calls don't lie.
+- **zsh history expansion eats `!` in node -e commands.** Either pre-set `set +H` or rewrite logical-not checks as equality.
+- **PASTE_X placeholder anti-pattern wasted ~15 minutes across three iterations.** Going forward, every command Claude provides ships with real values prefilled.
+- **iOS-only blind spot caught at session end.** Stack is Expo + React Native = cross-platform from day one. Cutting ~45% of UK and 40% of US users out of closed beta is not free. Launch milestone updated to dual-platform.
+- **TestFlight does NOT require Apple App Review for internal testers** (up to 100). Earlier "1-3 days Apple approval" estimate applied to external testing only. For 20-50 internal testers added via Apple IDs, only Apple wait is the Developer Program signup itself (~1 business day).
+
+### Pre-existing issues still open (carried)
+
+- Prisma drift on Supabase extensions
+- `tsconfig.json` `moduleResolution: bundler` blocks `tsc --noEmit` as CI check
+- Prisma 5.22 -> 7 upgrade available (do NOT do mid-build)
+- `[Gate]` console.log in `app/_layout.tsx` (Phase 5)
+- Orphan onboarding files `lifestyle/budget/training/facilities` (Phase 5)
+- `API_BASE` hardcoded in 5+ mobile files (Phase 5)
+- `react-native-sse` installed on mobile but unused (left from abandoned streaming start)
+
+### Files touched
+
+- `packages/api/src/config/neighborhoodCentroids.ts` — NEW (15 neighborhoods, `findNeighborhood` lookup)
+- `packages/api/src/routes/concierge.ts` — `searchGymsImpl` body rewritten, tool description updated, UUID filter added at chatMessage.create + hydrateGyms call sites
+- `fitroam-mobile/package.json` + lockfile — `react-native-sse` installed (unused after streaming pivot)
+
+---
+
+## Launch milestone updated — DUAL-PLATFORM CLOSED BETA
+
+Previous backlog said "TestFlight closed beta with 20-50 users in 3 cities." That was iOS-only. Corrected:
+
+**Closed beta = TestFlight (iOS) + Google Play Internal Testing (Android), simultaneously, 20-50 users in 3 cities.**
+
+Stack is Expo + React Native, every screen built so far works on both platforms. Android marginal cost: half-session of platform polish (back button gesture, status bar, Material defaults) + $25 one-time Google Play Console signup + `eas build --platform android`. Internal testing on Play distributes faster than TestFlight (no Apple review even for first build).
+
+### Apple TestFlight rules (corrected from prior backlog)
+
+- **Internal testing** (<=100 testers added via their Apple IDs): NO App Review required, builds usable minutes after upload.
+- **External testing** (public links, <=10,000 testers): first build of each version requires App Review (faster than App Store but still 24-48h).
+- Closed beta with 20-50 friends = internal testing = no Apple review gate.
+- Only Apple wait: Apple Developer Program signup ($99/yr, ~1 business day to approve).
+
+### Google Play Internal Testing
+
+- $25 one-time Google Play Console signup.
+- Internal testing track: up to 100 testers, no review, builds live in hours.
+- Same Expo codebase, `eas build --platform android` outputs AAB.
+
+---
+
+## What's next (priority order)
+
+### Founder weekend work (no Claude session — UNBLOCKED BY TODAY)
+- Backfill `citySlug` on existing gyms (london-gb / newyork-us / miami-us; Nottingham -> null or delete)
+- Manual verification of ~300 gyms across 3 cities. For each: `verified=true`, `verifiedAt=now()`, `dayPass=true/false`, `dayPassPence` (USD x100 for US, GBP x100 for UK, single integer column), `dayPassUrl` (deep link to gym's day-pass purchase page), `equipmentTags` array.
+
+### Founder admin (parallel, no Claude session)
+- Apple Developer Program signup ($99/year, https://developer.apple.com/programs/enroll/). ~1 business day to approve. **Start NOW.**
+- Google Play Console signup ($25 one-time, https://play.google.com/console/signup). Start NOW.
+
+### Next session — concierge 4 + fake-door auto-book bundle
+- **`addGymToTrip` + `removeGymFromTrip` backend tools.** Impl functions, agent loop dispatch cases, system prompt rules. Schema already has `TripGym` join table.
+- **Mobile Trips tab renders gyms attached to each trip.** Reuse existing `ChatGymCard` component, flat list under each trip, no redesign.
+- **Fake-door auto-book.** New `BookingInterest` table (userId, tripId, gymId, email, price-shown, createdAt, status='waitlisted'). `POST /api/booking-interest`. New AI tool `recordBookingInterest` so AI can offer "want me to sort it for you?" mid-chat. "Sort it for me" button on verified gym cards (secondary styling, smaller than the day-pass CTA). Modal shows price (e.g. "£2.99/month extra" or "£2 booking fee" — pricing decision deferred to start of session) + email capture + "we'll be in touch" CTA. Records to `BookingInterest`. NO actual booking, NO payment, ZERO legal surface — pure intent measurement.
+
+### Session after — pre-launch cleanup + first builds
+- Remove `[Gate]` console.log in `app/_layout.tsx`
+- Delete orphan onboarding files (`lifestyle.tsx`, `budget.tsx`, `training.tsx`, `facilities.tsx`)
+- Single `API_BASE` env var (currently hardcoded in 5+ files)
+- ToS + Privacy Policy drafts (template + light edits, not lawyer-grade — closed beta with informed users)
+- App Store listing metadata (screenshots, description, category, age rating)
+- Google Play listing metadata (same set)
+- Android platform polish pass (back button, status bar, Material defaults)
+- First `eas build --platform ios` -> App Store Connect -> internal testers can install
+- First `eas build --platform android` -> Play Console internal track -> internal testers can install
+
+### Realistic timeline to closed beta in testers' hands
+
+- **Today + tomorrow:** Apple Dev signup, Play Console signup (founder admin, no code)
+- **This weekend:** ~300 gym verification (founder admin, no code)
+- **Next coding session (~1 day this week):** Concierge 4 — addGymToTrip + Trips renders gyms + fake-door auto-book
+- **Following coding session (~1 day next week):** Pre-launch cleanup + Android polish + first iOS build + first Android build
+- **Distribution:** Apple internal TestFlight = minutes after build upload. Google Play internal = hours.
+
+**Target: 7-10 days to closed beta in testers' hands, dual-platform.**
+
+### Deferred to post-beta (not blocking launch)
+- Concierge session 3 — streaming (`react-native-sse` already installed if we circle back). Polish, not blocker.
+- Concierge session 5 — trust patterns, edge cases. Wait until 20-50 testers reveal what those weirdnesses actually are.
+- External TestFlight + Play Store public listing (if traction signal warrants moving beyond closed beta).

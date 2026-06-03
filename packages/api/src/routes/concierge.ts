@@ -3,6 +3,8 @@ import Anthropic from '@anthropic-ai/sdk'
 import { prisma } from '../lib/prisma'
 import { CITY_SLUGS } from '../config/cities'
 import { CITY_CENTROIDS } from '../config/cityCentroids'
+import { findNeighborhood } from '../config/neighborhoodCentroids'
+import { fetchNearbyGyms } from '../services/placesService'
 
 const router = Router()
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -57,7 +59,7 @@ You communicate ONLY via the respond tool. Never write plain text. Always end yo
 const TOOLS: Anthropic.Messages.Tool[] = [
   {
     name: 'searchGyms',
-    description: 'Search verified gyms in a launch city. Use as soon as the user gives you a city + any training hint. Returns ranked candidates.',
+    description: 'Search gyms in a launch city. Use as soon as the user gives you a city + any training hint. Pass `neighborhood` (e.g. "Brickell", "Soho", "Midtown") when the user mentions one — it narrows the search to that area. Returns { source, center, gyms[] }. `source: "verified-db"` means these are FitRoam-verified day-pass gyms (the moat — surface enthusiastically with day pass details). `source: "google-fallback"` means we don\'t have verified gyms in that area yet — return results from Google but tell the user honestly: "I haven\'t verified these myself — call ahead about day passes." `source: "empty"` means nothing found at all.',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -150,25 +152,111 @@ async function searchGymsImpl(args: {
   maxBudgetPence?: number
   neighborhood?: string
 }) {
-  const where: any = { citySlug: args.citySlug, dayPass: true }
-  if (typeof args.maxBudgetPence === 'number') {
-    where.OR = [{ dayPassPence: { lte: args.maxBudgetPence } }, { dayPassPence: null }]
+  const city = CITY_CENTROIDS[args.citySlug]
+  if (!city) {
+    return { gyms: [], error: `Unknown city: ${args.citySlug}` }
   }
-  const gyms = await prisma.gym.findMany({
-    where,
-    take: 10,
-    orderBy: [{ verified: 'desc' }, { ratingCount: 'desc' }],
-    select: {
-      id: true, name: true, address: true,
-      dayPassPence: true, equipmentTags: true,
-      verified: true, rating: true,
-    },
-  })
-  return gyms.map((g) => ({
-    id: g.id, name: g.name, address: g.address,
-    dayPassPence: g.dayPassPence, equipment: g.equipmentTags,
-    verified: g.verified, rating: g.rating,
-  }))
+
+  // Choose search center: neighborhood centroid if recognised, else city centroid.
+  const hood = findNeighborhood(args.neighborhood, args.citySlug)
+  const center = hood ?? { lat: city.lat, lng: city.lng, name: city.city }
+  const RADIUS_METERS = 5000
+
+  // Raw SQL: ST_DWithin against gyms within RADIUS_METERS of center.
+  // verified DESC, day_pass DESC, rating_count DESC -> moat first, then day-pass first, then popular.
+  // dayPass stays a soft preference (ranked), NOT a hard filter, so verified-but-day-pass-unknown gyms still surface.
+  type DbRow = {
+    id: string
+    name: string
+    address: string
+    day_pass: boolean
+    day_pass_pence: number | null
+    day_pass_url: string | null
+    equipment_tags: string[] | null
+    verified: boolean
+    rating: number | null
+    distance_m: number
+  }
+  const budgetGuard = typeof args.maxBudgetPence === 'number' ? args.maxBudgetPence : null
+
+  const rows = await prisma.$queryRaw<DbRow[]>`
+    SELECT
+      id,
+      name,
+      address,
+      day_pass,
+      day_pass_pence,
+      day_pass_url,
+      equipment_tags,
+      verified,
+      rating,
+      ST_DistanceSphere(
+        ST_MakePoint(lng, lat),
+        ST_MakePoint(${center.lng}, ${center.lat})
+      ) AS distance_m
+    FROM gyms
+    WHERE city_slug = ${args.citySlug}
+      AND ST_DWithin(
+        ST_MakePoint(lng, lat)::geography,
+        ST_MakePoint(${center.lng}, ${center.lat})::geography,
+        ${RADIUS_METERS}
+      )
+      AND (
+        ${budgetGuard}::int IS NULL
+        OR day_pass_pence IS NULL
+        OR day_pass_pence <= ${budgetGuard}::int
+      )
+    ORDER BY verified DESC, day_pass DESC, rating_count DESC NULLS LAST
+    LIMIT 10
+  `
+
+  if (rows.length > 0) {
+    return {
+      source: 'verified-db' as const,
+      center: { name: center.name, lat: center.lat, lng: center.lng },
+      gyms: rows.map((g) => ({
+        id: g.id,
+        name: g.name,
+        address: g.address,
+        dayPass: g.day_pass,
+        dayPassPence: g.day_pass_pence,
+        dayPassUrl: g.day_pass_url,
+        equipment: g.equipment_tags ?? [],
+        verified: g.verified,
+        rating: g.rating,
+        distanceM: Math.round(g.distance_m),
+      })),
+    }
+  }
+
+  // ── Fallback: live Google Places, tagged unverified ──
+  try {
+    const raw = await fetchNearbyGyms(center.lat, center.lng, RADIUS_METERS)
+    const top = raw.slice(0, 10)
+    return {
+      source: 'google-fallback' as const,
+      center: { name: center.name, lat: center.lat, lng: center.lng },
+      gyms: top.map((g: any) => ({
+        id: g.id ?? g.placeId ?? g.place_id ?? null,
+        name: g.name,
+        address: g.address ?? g.formattedAddress ?? null,
+        dayPass: false,
+        dayPassPence: null,
+        dayPassUrl: null,
+        equipment: g.equipmentTags ?? [],
+        verified: false,
+        rating: g.rating ?? null,
+        distanceM: null,
+      })),
+    }
+  } catch (err) {
+    console.warn('[concierge] Google fallback failed:', err)
+    return {
+      source: 'empty' as const,
+      center: { name: center.name, lat: center.lat, lng: center.lng },
+      gyms: [],
+    }
+  }
 }
 
 async function saveTripImpl(
@@ -618,13 +706,19 @@ router.post('/threads/:id/messages', async (req, res, next) => {
 
     const parsed = await runAgent(userId, history)
 
+    // Filter to UUIDs only. Google fallback gyms have Place IDs (not UUIDs) and
+    // can't be hydrated later via prisma.gym.findMany — they're surfaced in prose
+    // by the AI but not persisted as gym cards.
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    const persistableGymIds = parsed.gymIds.filter((id) => UUID_RE.test(id))
+
     const [assistantMsg] = await prisma.$transaction([
       prisma.chatMessage.create({
         data: {
           threadId: thread.id,
           role: 'assistant',
           content: parsed.message,
-          gymIds: parsed.gymIds.length ? (parsed.gymIds as any) : null,
+          gymIds: persistableGymIds.length ? (persistableGymIds as any) : null,
           toolResults: parsed.toolTurns.length ? (parsed.toolTurns as any) : null,
         },
       }),
@@ -637,7 +731,7 @@ router.post('/threads/:id/messages', async (req, res, next) => {
       }),
     ])
 
-    const gyms = await hydrateGyms(parsed.gymIds)
+    const gyms = await hydrateGyms(persistableGymIds)
 
     res.json({
       userMessage: { id: userMsg.id, role: 'user', content: userMsg.content, gyms: [], createdAt: userMsg.createdAt },
