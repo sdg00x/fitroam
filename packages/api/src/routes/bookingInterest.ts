@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { prisma } from '../lib/prisma'
+import { sendBookingInterestAlert } from '../lib/alerts'
 
 const router = Router()
 
@@ -63,6 +64,37 @@ router.post('/', async (req, res, next) => {
         status: 'waitlisted',
       },
       select: { id: true, createdAt: true },
+    })
+
+    // Fire alert (best-effort, do not await — never block the user response)
+    setImmediate(async () => {
+      try {
+        const [fullGym, user] = await Promise.all([
+          prisma.gym.findUnique({
+            where: { id: gymId },
+            select: { name: true, citySlug: true, dayPassUrl: true, dayPassPence: true },
+          }),
+          prisma.user.findUnique({ where: { id: userId }, select: { email: true, name: true } }),
+        ])
+        const trip = tripId
+          ? await prisma.trip.findUnique({ where: { id: tripId }, select: { name: true } })
+          : null
+        await sendBookingInterestAlert({
+          bookingInterestId: created.id,
+          userId,
+          userEmail: user?.email ?? email,
+          userName: user?.name,
+          gymName: fullGym?.name ?? gym.name,
+          gymCity: fullGym?.citySlug ?? null,
+          gymDayPassUrl: fullGym?.dayPassUrl ?? null,
+          gymDayPassPence: fullGym?.dayPassPence ?? null,
+          source: source ?? 'gym_card',
+          pricePence: PRICE_PENCE,
+          tripName: trip?.name ?? null,
+        })
+      } catch (e) {
+        console.error('[alerts] background alert failed', e)
+      }
     })
 
     res.json({

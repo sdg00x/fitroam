@@ -27,12 +27,16 @@ You are an agent, not a chatbot. The user came here for results, not conversatio
 - Never ask permission to do something. Just do it and tell the user what you did.
 - Never ask "want me to..." or "should I..." when you have enough info. Just do it.
 
-BOOKING / "SORT IT FOR ME"
-- FitRoam can record interest in handling a day-pass booking on the user's behalf for £2.99 per pass. This is a real product offering, currently waitlist-only — we will contact them to arrange it. Use the recordBookingInterest tool.
-- NEVER offer this proactively or in passing. Wait for the user to ask using phrases like "sort it for me", "book it", "handle it", "can you sort that out", "I don't want to deal with it".
-- When recording: confirm the gym (must be a verified DB gym — Google-fallback gyms cannot be booked) and confirm the user's email. If you don't have their email from prior context, ask for it in conversation BEFORE calling recordBookingInterest.
-- After recording, confirm naturally: e.g. "Done — we'll be in touch to sort your Equinox Brickell pass. £2.99 per pass." Do NOT promise immediate booking or a specific timeframe.
-- If the gym is a google-fallback (no UUID), say plainly that you can only handle bookings for gyms in your verified network, and suggest a verified alternative if one fits.
+WHEN USER ASKS YOU TO BOOK / SORT IT / HANDLE IT
+- FitRoam Concierge (day-pass booking on the user's behalf) is being built but NOT live yet.
+- You do NOT have a tool to record booking interest. The user must tap the green "Let us handle it" button on the gym card to register interest.
+- When the user signals book-intent ("sort it for me", "book it", "handle it", "can you do it", "I don't want to deal with it"), respond by: (1) acknowledging warmly without promising a service that's not live yet, (2) pointing them to the green button on the gym card to register early-access interest, (3) ALWAYS surfacing the gym's direct dayPassUrl inline so they can book it themselves right now in the meantime.
+- Tone: warm, founder-honest, slightly enthusiastic about what's coming. Examples (vary the wording per conversation, don't parrot):
+  * "Concierge isn't live yet, [name] — we're moving fast on it. Tap the green button on the SWEAT440 card to be the first we contact when we flip the switch. In the meantime, here's the day-pass page so you can grab it yourself: [URL]"
+  * "I can't handle the booking for you yet — but we're building it, and you can lock in early access by tapping the green button on that gym's card. Day-pass page in case you want to sort it yourself: [URL]"
+- NEVER promise a timeline. No "soon", no "next week", no "by Friday". The closest you can say is "we're moving fast" or "we'll let you know first".
+- NEVER claim the service is live, in maintenance, or temporarily down. It is being built. Frame future, not present.
+- If the user has NO verified gym in front of them (Google-fallback only): say plainly that the booking concierge will only work for gyms in our verified network, and let them know we're expanding that. Don't direct them to a button that won't appear.
 
 VOICE
 - Conversational and warm, like a friend who travels constantly and knows every gym scene.
@@ -53,7 +57,7 @@ WHEN searchGyms RETURNS NOTHING
 - If nothing fits and the user just wants a plan, save the trip anyway so they don't lose context.
 
 WHEN THE USER ASKS FOR SOMETHING YOU CAN'T DO
-- You can: search gyms, save/update trips, list saved trips, delete trips, list the user's gym visits (passport stamps), attach a gym to a saved trip, remove a gym from a saved trip, record interest in FitRoam handling a booking on their behalf.
+- You can: search gyms, save/update trips, list saved trips, delete trips, list the user's gym visits (passport stamps), attach a gym to a saved trip, remove a gym from a saved trip.
 - You cannot (YET): mark NEW visits, edit profile. These will come.
 - If asked for something outside your tools, be honest and short: "Not wired up yet — you can do it from the [Trips/Profile/Passport] tab for now." Don't invent permanent limitations like "I only have your trip info" — that misrepresents the product. The capability is coming; for now the user does it elsewhere in the app.
 
@@ -158,19 +162,6 @@ const TOOLS: Anthropic.Messages.Tool[] = [
         gymId: { type: 'string' },
       },
       required: ['tripId', 'gymId'],
-    },
-  },
-  {
-    name: 'recordBookingInterest',
-    description: "Record that the user wants FitRoam to handle buying a day pass on their behalf. This is a fake-door test — we do NOT actually book anything. Use ONLY when the user explicitly says they want us to 'sort it', 'book it', 'handle it', or similar. The price is £2.99 per pass. Confirm the user's email in conversation first if you don't already have it from context.",
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        gymId: { type: 'string', description: 'UUID of the verified gym they want booked. Google-fallback gyms cannot be booked.' },
-        email: { type: 'string', description: "User's email for the waitlist confirmation." },
-        tripId: { type: 'string', description: 'Optional UUID of the related trip.' },
-      },
-      required: ['gymId', 'email'],
     },
   },
   {
@@ -553,50 +544,6 @@ async function removeGymFromTripImpl(
   return { ok: true, removed: result.count };
 }
 
-async function recordBookingInterestImpl(
-  userId: string,
-  args: { gymId: string; email: string; tripId?: string },
-) {
-  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (!UUID_RE.test(args.gymId)) {
-    return { ok: false, error: "gymId must be a verified DB gym UUID." };
-  }
-  if (!args.email || !args.email.includes("@")) {
-    return { ok: false, error: "A valid email is required." };
-  }
-  if (args.tripId && !UUID_RE.test(args.tripId)) {
-    return { ok: false, error: "tripId must be a valid UUID if provided." };
-  }
-
-  const gym = await prisma.gym.findUnique({
-    where: { id: args.gymId },
-    select: { id: true, name: true },
-  });
-  if (!gym) return { ok: false, error: "Gym not found." };
-
-  if (args.tripId) {
-    const trip = await prisma.trip.findFirst({
-      where: { id: args.tripId, userId },
-      select: { id: true },
-    });
-    if (!trip) return { ok: false, error: "Trip not found or not owned by user." };
-  }
-
-  const created = await prisma.bookingInterest.create({
-    data: {
-      userId,
-      gymId: args.gymId,
-      tripId: args.tripId ?? null,
-      email: args.email.trim().toLowerCase(),
-      pricePence: 299,
-      source: "ai_chat",
-      status: "waitlisted",
-    },
-    select: { id: true },
-  });
-
-  return { ok: true, bookingInterestId: created.id, gymName: gym.name, pricePence: 299 };
-}
 
 async function loadUserContext(userId: string): Promise<string> {
   const [user, profile, recentTrips] = await Promise.all([
@@ -745,8 +692,6 @@ async function runAgent(
         result = await addGymToTripImpl(userId, tu.input as any)
       } else if (tu.name === 'removeGymFromTrip') {
         result = await removeGymFromTripImpl(userId, tu.input as any)
-      } else if (tu.name === 'recordBookingInterest') {
-        result = await recordBookingInterestImpl(userId, tu.input as any)
       } else {
         result = { error: `Unknown tool: ${tu.name}` }
       }
