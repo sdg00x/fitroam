@@ -44,17 +44,34 @@ router.post('/', async (req, res, next) => {
 
     const gym = await prisma.gym.findUnique({
       where: { id: gymId },
-      select: { id: true, name: true, verified: true },
+      // ALERT_CONTEXT_INLINE: fetch everything needed for both validation AND the alert email.
+      // Prevents re-querying Prisma inside setImmediate, which was exhausting the connection pool.
+      select: {
+        id: true,
+        name: true,
+        verified: true,
+        citySlug: true,
+        dayPassUrl: true,
+        dayPassPence: true,
+      },
     })
     if (!gym) return res.status(404).json({ error: 'Gym not found' })
     if (!gym.verified) {
       return res.status(400).json({ error: 'We only handle bookings for verified gyms.' })
     }
 
+    // Fetch user once for alert context — single query, no setImmediate re-fetch later
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, name: true },
+    })
+
+    // Trip ownership check + capture name for alert context in same query
+    let trip: { id: string; name: string } | null = null
     if (tripId) {
-      const trip = await prisma.trip.findFirst({
+      trip = await prisma.trip.findFirst({
         where: { id: tripId, userId },
-        select: { id: true },
+        select: { id: true, name: true },
       })
       if (!trip) return res.status(404).json({ error: 'Trip not found' })
     }
@@ -72,28 +89,19 @@ router.post('/', async (req, res, next) => {
       select: { id: true, createdAt: true },
     })
 
-    // Fire alert (best-effort, do not await — never block the user response)
+    // Fire alert (best-effort, do not await — never block the user response).
+    // ZERO Prisma queries inside setImmediate — all context captured from inline fetches above.
     setImmediate(async () => {
       try {
-        const [fullGym, user] = await Promise.all([
-          prisma.gym.findUnique({
-            where: { id: gymId },
-            select: { name: true, citySlug: true, dayPassUrl: true, dayPassPence: true },
-          }),
-          prisma.user.findUnique({ where: { id: userId }, select: { email: true, name: true } }),
-        ])
-        const trip = tripId
-          ? await prisma.trip.findUnique({ where: { id: tripId }, select: { name: true } })
-          : null
         await sendBookingInterestAlert({
           bookingInterestId: created.id,
           userId,
           userEmail: user?.email ?? email,
           userName: user?.name,
-          gymName: fullGym?.name ?? gym.name,
-          gymCity: fullGym?.citySlug ?? null,
-          gymDayPassUrl: fullGym?.dayPassUrl ?? null,
-          gymDayPassPence: fullGym?.dayPassPence ?? null,
+          gymName: gym.name,
+          gymCity: gym.citySlug,
+          gymDayPassUrl: gym.dayPassUrl,
+          gymDayPassPence: gym.dayPassPence,
           source: source ?? 'gym_card',
           pricePence: PRICE_PENCE,
           tripName: trip?.name ?? null,
@@ -174,7 +182,7 @@ router.get('/admin', async (req, res, next) => {
         createdAt: true,
         gym: { select: { id: true, name: true, citySlug: true, dayPassUrl: true, dayPassPence: true } },
         trip: { select: { id: true, name: true } },
-        user: { select: { id: true, name: true, email: true } },
+        user: { select: { id: true, name: true, email: true, phone: true } },
       },
     })
 

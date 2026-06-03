@@ -17,6 +17,10 @@ const PORT = process.env.PORT ?? 3000
 
 app.use(express.json())
 
+// Serve the admin web UI (static HTML at /admin)
+app.use("/admin", express.static("public"))
+app.get("/admin", (_req, res) => res.sendFile(require("path").resolve("public/admin.html")))
+
 // Routes
 app.get('/health', (_req, res) => {
   res.json({
