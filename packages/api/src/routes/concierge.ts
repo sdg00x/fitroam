@@ -5,6 +5,7 @@ import { CITY_SLUGS } from '../config/cities'
 import { CITY_CENTROIDS } from '../config/cityCentroids'
 import { findNeighborhood } from '../config/neighborhoodCentroids'
 import { fetchNearbyGyms } from '../services/placesService'
+import { sendUserIntentAlert } from '../lib/alerts'
 
 const router = Router()
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -36,7 +37,7 @@ WHEN USER ASKS YOU TO BOOK / SORT IT / HANDLE IT
   * "I can't handle the booking for you yet — but we're building it, and you can lock in early access by tapping the green button on that gym's card. Day-pass page in case you want to sort it yourself: [URL]"
 - NEVER promise a timeline. No "soon", no "next week", no "by Friday". The closest you can say is "we're moving fast" or "we'll let you know first".
 - NEVER claim the service is live, in maintenance, or temporarily down. It is being built. Frame future, not present.
-- If the user has NO verified gym in front of them (Google-fallback only): say plainly that the booking concierge will only work for gyms in our verified network, and let them know we're expanding that. Don't direct them to a button that won't appear.
+- If the user is asking about booking a specific gym whose verified field is false: say plainly that the booking concierge only works for gyms in our verified network yet, and let them know we are expanding that. Do not direct them to a button that will not appear on unverified gym cards.
 
 VOICE
 - Conversational and warm, like a friend who travels constantly and knows every gym scene.
@@ -50,7 +51,7 @@ WHEN INFO IS GENUINELY MISSING
 - City + dates but no training focus → save the trip first, then ask about training.
 
 WHEN A CITY ISN'T COVERED
-- You cover London, NYC, Miami only. If they mention elsewhere (Dubai, Paris, etc.), say plainly you don't help with that city yet — but if they're also going to a covered city, pivot to that.
+- You cover London, NYC, Miami only. BEFORE responding, ALWAYS call recordUserIntent with category 'out_of_scope_city' and a detail describing what they asked for. Then in your response, say plainly you don't help with that city yet — but if they're also going to a covered city, pivot to that.
 
 WHEN searchGyms RETURNS NOTHING
 - Don't dead-end. Offer to flex budget, look at a different area, or note you'll keep watching.
@@ -59,7 +60,8 @@ WHEN searchGyms RETURNS NOTHING
 WHEN THE USER ASKS FOR SOMETHING YOU CAN'T DO
 - You can: search gyms, save/update trips, list saved trips, delete trips, list the user's gym visits (passport stamps), attach a gym to a saved trip, remove a gym from a saved trip.
 - You cannot (YET): mark NEW visits, edit profile. These will come.
-- If asked for something outside your tools, be honest and short: "Not wired up yet — you can do it from the [Trips/Profile/Passport] tab for now." Don't invent permanent limitations like "I only have your trip info" — that misrepresents the product. The capability is coming; for now the user does it elsewhere in the app.
+- BEFORE responding when asked for something outside your tools, ALWAYS call recordUserIntent with category 'unimplemented_feature' and a detail describing the ask. Then be honest and short: "Not wired up yet — you can do it from the [Trips/Profile/Passport] tab for now." Don't invent permanent limitations like "I only have your trip info" — that misrepresents the product. The capability is coming; for now the user does it elsewhere in the app.
+- For any other notable signal (a strong opinion, a feature idea, a specific complaint), call recordUserIntent with category 'other_signal' silently. This is just a heads-up to the founder, the user never sees it.
 
 OUTPUT
 You communicate ONLY via the respond tool. Never write plain text. Always end your turn by calling respond with:
@@ -70,7 +72,7 @@ You communicate ONLY via the respond tool. Never write plain text. Always end yo
 const TOOLS: Anthropic.Messages.Tool[] = [
   {
     name: 'searchGyms',
-    description: 'Search gyms in a launch city. Use as soon as the user gives you a city + any training hint. Pass `neighborhood` (e.g. "Brickell", "Soho", "Midtown") when the user mentions one — it narrows the search to that area. Returns { source, center, gyms[] }. `source: "verified-db"` means these are FitRoam-verified day-pass gyms (the moat — surface enthusiastically with day pass details). `source: "google-fallback"` means we don\'t have verified gyms in that area yet — return results from Google but tell the user honestly: "I haven\'t verified these myself — call ahead about day passes." `source: "empty"` means nothing found at all.',
+    description: 'Search gyms in a launch city. Use as soon as the user gives a city plus any training hint. Pass the neighborhood field (e.g. Brickell, Soho, Midtown) when mentioned. Returns source, center, and a gyms array — each gym has a verified boolean. The response already includes Google supplementation when the verified pool is thin (under 3 results) — never ask the user for permission to do a wider search; the wider search is the default. Source values: verified means every gym in the list is verified — surface enthusiastically with day pass details. Mixed means some are verified (surface those first with day pass details) and some are Google (caveat the unverified ones with: I have not verified these myself, worth calling ahead). Google-fallback means none verified, all Google — caveat all of them. Empty means nothing found at all.',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -247,52 +249,69 @@ async function searchGymsImpl(args: {
     LIMIT 10
   `
 
-  if (rows.length > 0) {
+  // Map DB rows to the response shape used by the AI.
+  const verifiedGyms = rows.map((g) => ({
+    id: g.id,
+    name: g.name,
+    address: g.address,
+    dayPass: g.day_pass,
+    dayPassPence: g.day_pass_pence,
+    dayPassUrl: g.day_pass_url,
+    equipment: g.equipment_tags ?? [],
+    verified: g.verified,
+    rating: g.rating,
+    distanceM: Math.round(g.distance_m),
+  }))
+
+  // -- Merge: DB results, plus Google supplementation when the moat is thin (<3 verified) --
+  // Rationale: in beta we have very few verified gyms per city, so almost every search
+  // benefits from showing additional Google options the user can call ahead about.
+  // The AI never needs to ask permission for a "wider search" -- the wider search is the default.
+  const NEEDS_SUPPLEMENT_THRESHOLD = 3
+  if (rows.length >= NEEDS_SUPPLEMENT_THRESHOLD) {
     return {
-      source: 'verified-db' as const,
+      source: 'verified' as const,
       center: { name: center.name, lat: center.lat, lng: center.lng },
-      gyms: rows.map((g) => ({
-        id: g.id,
-        name: g.name,
-        address: g.address,
-        dayPass: g.day_pass,
-        dayPassPence: g.day_pass_pence,
-        dayPassUrl: g.day_pass_url,
-        equipment: g.equipment_tags ?? [],
-        verified: g.verified,
-        rating: g.rating,
-        distanceM: Math.round(g.distance_m),
-      })),
+      gyms: verifiedGyms,
     }
   }
 
-  // ── Fallback: live Google Places, tagged unverified ──
+  // Try Google supplementation. Failure is non-fatal -- we still return whatever we have.
+  let googleGyms: typeof verifiedGyms = []
   try {
     const raw = await fetchNearbyGyms(center.lat, center.lng, RADIUS_METERS)
-    const top = raw.slice(0, 10)
-    return {
-      source: 'google-fallback' as const,
-      center: { name: center.name, lat: center.lat, lng: center.lng },
-      gyms: top.map((g: any) => ({
-        id: g.id ?? g.placeId ?? g.place_id ?? null,
-        name: g.name,
-        address: g.address ?? g.formattedAddress ?? null,
-        dayPass: false,
-        dayPassPence: null,
-        dayPassUrl: null,
-        equipment: g.equipmentTags ?? [],
-        verified: false,
-        rating: g.rating ?? null,
-        distanceM: null,
-      })),
-    }
+    // Deduplicate against verified results by name (Google may return the same gym).
+    const verifiedNames = new Set(verifiedGyms.map((g) => g.name.toLowerCase()))
+    const filtered = raw.filter((g: any) => !verifiedNames.has((g.name ?? '').toLowerCase()))
+    const top = filtered.slice(0, 10 - verifiedGyms.length)
+    googleGyms = top.map((g: any) => ({
+      id: g.id ?? g.placeId ?? g.place_id ?? null,
+      name: g.name,
+      address: g.address ?? g.formattedAddress ?? null,
+      dayPass: false,
+      dayPassPence: null,
+      dayPassUrl: null,
+      equipment: g.equipmentTags ?? [],
+      verified: false,
+      rating: g.rating ?? null,
+      distanceM: null,
+    }))
   } catch (err) {
-    console.warn('[concierge] Google fallback failed:', err)
-    return {
-      source: 'empty' as const,
-      center: { name: center.name, lat: center.lat, lng: center.lng },
-      gyms: [],
-    }
+    console.warn('[concierge] Google supplementation failed:', err)
+  }
+
+  // Compose final response. verified gyms come first, google supplements after.
+  const mergedGyms = [...verifiedGyms, ...googleGyms]
+  let source: 'verified' | 'mixed' | 'google-fallback' | 'empty'
+  if (mergedGyms.length === 0) source = 'empty'
+  else if (verifiedGyms.length === 0) source = 'google-fallback'
+  else if (googleGyms.length === 0) source = 'verified'
+  else source = 'mixed'
+
+  return {
+    source,
+    center: { name: center.name, lat: center.lat, lng: center.lng },
+    gyms: mergedGyms,
   }
 }
 

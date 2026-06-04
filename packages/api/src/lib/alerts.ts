@@ -87,3 +87,65 @@ export async function sendBookingInterestAlert(
     return false
   }
 }
+
+
+export interface UserIntentAlertInput {
+  userId:    string
+  userName:  string | null
+  userEmail: string | null
+  category:  string
+  detail:    string
+}
+
+export async function sendUserIntentAlert(
+  input: UserIntentAlertInput,
+): Promise<boolean> {
+  const to = process.env.ALERT_TO_EMAIL
+  const from = process.env.ALERT_FROM_EMAIL || 'onboarding@resend.dev'
+  const resend = getResend()
+  if (!resend || !to) {
+    console.warn('[alerts] Resend not configured for user intent — skipping', {
+      hasKey: !!process.env.RESEND_API_KEY,
+      hasTo: !!to,
+    })
+    return false
+  }
+
+  const emoji = input.category === 'out_of_scope_city' ? '🌍'
+              : input.category === 'unimplemented_feature' ? '🔧'
+              : '📝'
+  const label = input.category.replace(/_/g, ' ')
+  const subject = `${emoji} User signal: ${label} — ${input.userName ?? input.userEmail ?? input.userId}`
+
+  const lines = [
+    `<h2>User intent signal captured</h2>`,
+    `<p><strong>Category:</strong> ${label}</p>`,
+    `<p><strong>User:</strong> ${input.userName ?? '(no name)'} &lt;${input.userEmail ?? '(no email)'}&gt;</p>`,
+    `<p><strong>What they wanted:</strong></p>`,
+    `<blockquote style="border-left:3px solid #c8ff57;padding-left:12px;color:#333">${input.detail}</blockquote>`,
+    `<hr/>`,
+    `<p style="color:#666;font-size:12px">user_id: ${input.userId}</p>`,
+    `<p style="color:#666;font-size:12px">This signal helps you decide what to expand (cities) or build next (features). No user-facing action required.</p>`,
+  ]
+
+  try {
+    const res = await Promise.race([
+      resend.emails.send({
+        from,
+        to: [to],
+        subject,
+        html: lines.join('\n'),
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Resend timeout after 10s')), 10000)),
+    ]) as any
+    if ((res as any)?.error) {
+      console.error('[alerts] Resend returned error for user intent', (res as any).error)
+      return false
+    }
+    console.log('[alerts] user intent alert sent', { category: input.category, userId: input.userId })
+    return true
+  } catch (err) {
+    console.error('[alerts] Failed to send user intent alert', err)
+    return false
+  }
+}

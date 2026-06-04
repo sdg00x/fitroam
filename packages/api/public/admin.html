@@ -191,8 +191,8 @@
     content.innerHTML = statsHtml + rowsHtml;
   }
 
-  // Auto-load if saved
-  if (saved) load();
+  // Auto-load disabled to prevent admin tab from creating Prisma pool contention
+  // during phone testing. Tap Load to fetch.
 </script>
 </body>
 </html>
