@@ -254,6 +254,7 @@ async function searchGymsImpl(args: {
     day_pass: boolean
     day_pass_pence: number | null
     day_pass_url: string | null
+    website_url: string | null
     equipment_tags: string[] | null
     verified: boolean
     rating: number | null
@@ -269,6 +270,7 @@ async function searchGymsImpl(args: {
       day_pass,
       day_pass_pence,
       day_pass_url,
+      website_url,
       equipment_tags,
       verified,
       rating,
@@ -300,6 +302,7 @@ async function searchGymsImpl(args: {
     dayPass: g.day_pass,
     dayPassPence: g.day_pass_pence,
     dayPassUrl: g.day_pass_url,
+    websiteUrl: g.website_url,
     equipment: g.equipment_tags ?? [],
     verified: g.verified,
     rating: g.rating,
@@ -334,6 +337,7 @@ async function searchGymsImpl(args: {
       dayPass: false,
       dayPassPence: null,
       dayPassUrl: null,
+      websiteUrl: g.websiteUrl ?? g.websiteUri ?? null,
       equipment: g.equipmentTags ?? [],
       verified: false,
       rating: g.rating ?? null,
