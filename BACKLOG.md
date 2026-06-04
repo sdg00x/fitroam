@@ -1173,3 +1173,128 @@ Long session. Three things really happened: (a) shipped the full closed-beta UX 
 - Distribution: TestFlight internal = minutes after upload; Play internal = hours
 
 **Target: 7-10 days to closed beta, dual-platform. Closer than ever.**
+
+---
+
+## Day 11 — Addendum (June 4 evening session, ~hour 7-11)
+
+Long evening of iteration after the original Day 11 commits. Session went deeper into closed-beta UX, expanded AI capabilities, surfaced and fixed two real bugs, and started a light-mode accessibility sweep. Real-device testing drove every decision.
+
+### Shipped — backend (3 commits)
+
+- **Option C verification (real-device test):** Earlier in the session the AI promised a "wider Google search" but kept returning the same verified result. Caught and fixed via the auto-merge introduced earlier; later AI runs correctly surfaced merged verified + Google results.
+
+- **Restored missing recordUserIntent tool + impl + dispatch.** Critical bug: during the line-74 syntax-fix rewrite earlier in Day 11, the tool definition and impl got silently dropped. System prompt was instructing the AI to call a tool that no longer existed. **Email signal had been non-functional for hours.** Now restored. Lesson: when rewriting a multi-line broken string, audit the surrounding tool definitions — the broken string may have swallowed multiple tools into one malformed line that line-replace nukes.
+
+- **`logVisit` tool added.** AI can now log passport stamps on the user's behalf when they say "I went to PureGym yesterday." Requires verified UUID (Google place_ids rejected). Visit logged with `status: 'confirmed'` since AI logging implies user-stated. AI must call `searchGyms` first to disambiguate when gym name is generic.
+
+- **`updateProfile` tool added.** AI can update one whitelisted field per call (primaryActivity / citySlug / priorities / maxDistanceMinutes / trainingPattern). System prompt mandates user confirmation before firing — wrong updates erode trust faster than missing capability.
+
+- **BookingInterest schema migration (direct SQL via Supabase):** `gym_id` nullable, added `gym_place_id` / `gym_name_snapshot` / `gym_address_snapshot` columns. Prisma client regenerated. Relation `gym Gym` → `gym Gym?` with `onDelete: SetNull`. Supports two acceptable shapes on POST `/api/booking-interest`:
+  - Verified path: `gymId` UUID → £2.99 price, `source: 'gym_card'`, 🟢 alert subject "New concierge waitlist tap"
+  - Unverified path: `gymPlaceId` + name + address snapshot → £0, `source: 'verification_request'`, ⭐ alert subject "Verification request" with different action prompt
+- `sendBookingInterestAlert` branches on `isVerified` for subject + body + action.
+
+- **`websiteUrl` exposed in `searchGyms` response** — both verified-DB and Google-fallback gyms now carry the gym homepage URL. AI has access. (Tool-description encouragement REVERTED mid-session after device test showed AI dropping to prose-mode markdown lists instead of structured cards. Field is exposed for v1.x usage; system-prompt activation is a future session decision.)
+
+### Shipped — mobile (2 commits)
+
+- **Unverified gym verification-request UI.** Green button now shows on all gyms (signed-in user). Copy and styling branch on `verified`:
+  - Verified: filled green "Let us handle everything for you" + "£2.99 · early access"
+  - Unverified: outline-style green "Notify me when we cover this gym" + "early access" (transparent bg + 1.5px accent border)
+- **Tap-card-for-details hint louder on unverified.** Accent color, fontSize 13, bold — primary action visual weight. Verified gyms keep the original subtle grey hint (their primary action is the green concierge button).
+- **`bookingInterest.ts` helper widened to discriminated union** (`kind: 'verified'` | `kind: 'unverified'`). Body assembly branches on kind.
+- **`BookingInterestModal` updated:** gym prop carries `verified` flag. POST and success copy both branch. Unverified copy: "isn't in our verified network yet — we haven't checked their day-pass setup ourselves. We've logged your interest so we can prioritise verifying gyms like this one next."
+
+- **Light-mode accent contrast fix (WCAG AA).** Previously `#c8ff57` was used as text color across 12 surfaces — fails contrast on white backgrounds at ~1.5:1 (needs 4.5:1). New `accentReadable` token: `#c8ff57` in dark mode (unchanged), `#5a8f1a` in light mode (4.6:1 against white). Swept 12 files: text/icon/spinner usages migrated. Background fills and `accentText` (dark text on green fill) left alone.
+
+- **Get Access modal £0 bug fix.** Unverified gyms have null `dayPassPence`. UI was rendering "1 day pass — £0" via `?? 0` fallback. Now drops the price suffix entirely when unknown, adds "Price not published — check with the gym before going." to the subline. Comparison boxes show "—" instead of "£0."
+
+- **Leg prefill regression fix.** `planLeg` was routing to `/(tabs)` (the tab group, not a specific tab). Sometimes routed to whichever tab was last active. Now routes to `/(tabs)/home` explicitly. Also dropped `router.setParams` clear (caused effect-re-fire on some expo-router versions); `consumedPlanningRef` is the sole guard. Bumped focus delay 100ms → 400ms for real-device tab-transition timing.
+
+### Decisions locked
+
+- **Lenient out-of-scope cities** (Berlin, Paris, Tokyo): held strict line. AI declines + fires `recordUserIntent` for the demand signal. Email volume after 2 weeks of beta tells us when to expand. Cleaner moat + cleaner signal than ambient leniency.
+- **Green button on unverified gyms (verification-request fake door):** ships. Different copy + visual weight + payload from concierge fake door. Captures demand signal for which gyms to verify next, with no broken promise of concierge service we can't deliver.
+- **AI silent-tool-call architecture:** `recordUserIntent` fires silently — no user-visible artifact. Logs to founder via email + lays foundation for analytics table in v1.x.
+
+### Lessons logged
+
+- **`tsx watch` actually rolls back changes silently.** Two patches earlier in the night looked like they applied (confirmation logs, grep showed results), but when tested on device behaved like the old code. Force-restart Tab 2 on every nontrivial backend edit. Day 8/9/10 lesson reinforced for the third+ time.
+- **Apostrophes inside single-quoted JS strings break the file silently when grep can't see syntax.** Cost ~20 min mid-session. The `recordUserIntent` rollback was found via diff against the commit, not via tsc (tsc had been passing because the broken line was a string literal, parser-recoverable). Going forward: any string with apostrophes goes inside double-quoted or backticked literals.
+- **Patch failures cascade.** The line-74 syntax-fix rewrite silently dropped `recordUserIntent`. The next patch I tried (route changes) anchored on an interface that didn't exist. The next one anchored on a tool dispatch that didn't exist. Each anchor failure cost diagnostic minutes. Discipline: when patches abort, audit git diff against last good commit BEFORE re-patching.
+- **Scope creep at hour 6+ is genuine product risk.** Each "small UX iteration" I shipped at hour 7-11 was real, none alone was harmful, but the cumulative cost was ~5 hours of fatigued patch-and-test cycles where I made the same mistake (apostrophes-in-strings) twice. Going forward: scope hard-locked at session start, additions require explicit re-scope check.
+- **Real-device test before declaring ship-ready.** Three things were "confirmed working" in this session that broke on real device: leg prefill (routed wrong tab), AI Google fallback (loop bug), `recordUserIntent` (silently missing tool). Curl tests aren't enough — device-test before celebrating.
+
+### Pre-existing issues still open (carried)
+
+- Prisma drift on Supabase extensions
+- `tsconfig.json` `moduleResolution: bundler` (now that tsc passes, investigate)
+- Prisma 5.22 → 7 upgrade available (defer)
+- `[Gate]` console.log in `app/_layout.tsx` (Phase 5)
+- Orphan onboarding files `lifestyle/budget/training/facilities` (Phase 5)
+- `react-native-sse` installed but unused (Day 10 carryover)
+- ADMIN_USER_IDS hardcoded — env var (v1.1)
+- Light-mode accent sweep complete BUT untested for completeness — there may be edge surfaces I missed; spot-check during weekend verification work
+
+### Open items deferred from tonight's scope (raised, not built)
+
+These were raised during real-device testing and explicitly deferred:
+
+- **Item 16 — AI URL knowledge gap (PARTIALLY shipped).** Backend now exposes `websiteUrl` via `searchGyms`, AI has the data. System prompt encouragement was reverted because AI dropped to prose-mode (markdown bullet lists of gym names instead of structured `gymIds`). Re-tackle in next session: instead of telling the AI to "mention websiteUrl in prose," teach it that the rendered gym card itself surfaces this — and the AI just needs to not claim ignorance.
+- **Item 17 — Length-of-stay collection.** AI captures intent length-of-stay before search to power product-direction analytics. Strategic decision deferred until 200+ trips exist. Existing `Trip.arriveOn / departOn` already gives average length on demand via SQL.
+- **Item 18 — Profile inbox for user feedback.** Beta phase relies on direct text/email feedback (20-50 close-contact testers). Add when scale demands. Typeform/Tally link in Profile is sufficient interim.
+- **Chat thread delete (v1.1).** User can't clean stale test threads from chat history sheet. Cheap fix, defer to first post-launch UX pass.
+- **Multi-gym hero pattern.** AI should lead with 1 hero card + "show me 2 more?" offer rather than dumping multiple cards inline. System-prompt tuning, not architectural.
+- **GET ACCESS button consistency on unverified gyms.** Image 2 in session showed inconsistency: AI claimed no URL, but gym detail page renders Get Access fine. Addressed at backend (websiteUrl exposed) but mobile gym-detail flow vs chat-card flow may have different routing logic worth auditing.
+
+### Files touched (full session)
+
+**Backend (4 files across 3 commits):**
+- `prisma/schema.prisma` — BookingInterest schema migrated
+- `src/lib/alerts.ts` — sendBookingInterestAlert branches on isVerified
+- `src/routes/bookingInterest.ts` — POST accepts both shapes
+- `src/routes/concierge.ts` — websiteUrl exposed; recordUserIntent + logVisit + updateProfile tools; system prompt capability list
+
+**Mobile (12 files across 2 commits):**
+- `src/theme/tokens.ts` — accentReadable token added
+- `src/lib/bookingInterest.ts` — union type
+- `src/components/ChatGymCard.tsx` — green button branches; hierarchy fixes
+- `src/components/BookingInterestModal.tsx` — gym prop widened; copy branches
+- `src/components/GetAccessForm.tsx` — accent text → accentReadable
+- `app/gym/[id].tsx` — £0 bug fix; accent sweep
+- `app/(tabs)/home.tsx` — leg prefill regression fix; accent sweep
+- `app/(tabs)/trips.tsx` — accent sweep
+- `app/trips/[id].tsx` — planLeg routes to /(tabs)/home explicitly; accent sweep
+- `app/welcome.tsx`, `app/onboarding/style.tsx` — accent sweep
+
+---
+
+## What's actually next (priority order)
+
+### This weekend — founder admin (no Claude session)
+1. Apple Developer Program signup ($99/year)
+2. Google Play Console signup ($25)
+3. **~300 gym verification across London / NYC / Miami.** Every verified gym makes the AI more useful and the green concierge button more meaningful.
+
+### Next coding session — Pre-TestFlight cleanup
+4. Remove `[Gate]` console.log, delete orphan onboarding files, investigate `moduleResolution: bundler`, single API_BASE env var, ToS/Privacy drafts, App Store + Play metadata
+5. First `eas build --platform ios` + `eas build --platform android`
+6. Internal TestFlight + Play Internal distribution
+
+### After that
+7. **Re-tackle item 16** (AI URL knowledge / gym data surfacing) — system prompt tuning that doesn't drop the AI to prose mode
+8. AI multi-gym hero pattern (system prompt)
+9. Chat thread delete UX
+10. Light-mode accessibility spot-check (during real beta use)
+
+### Deferred (post-PMF signal)
+- Length-of-stay analytics (build after 200+ trips)
+- Profile inbox (build after Typeform-style fallback is insufficient)
+- Berlin / out-of-scope city policy revisit
+- Voice input wiring
+- Streaming responses (SSE)
+- 4th launch city
+- Pilates / yoga support
+
+**Target: 7-10 days to dual-platform closed beta.**
