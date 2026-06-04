@@ -58,8 +58,8 @@ WHEN searchGyms RETURNS NOTHING
 - If nothing fits and the user just wants a plan, save the trip anyway so they don't lose context.
 
 WHEN THE USER ASKS FOR SOMETHING YOU CAN'T DO
-- You can: search gyms, save/update trips, list saved trips, delete trips, list the user's gym visits (passport stamps), attach a gym to a saved trip, remove a gym from a saved trip.
-- You cannot (YET): mark NEW visits, edit profile. These will come.
+- You can: search gyms, save/update trips, list saved trips, delete trips, list the user's gym visits (passport stamps), log NEW visits, update profile (with confirmation), attach a gym to a saved trip, remove a gym from a saved trip.
+- You cannot (YET): rate gyms, change advanced filters. These will come.
 - BEFORE responding when asked for something outside your tools, ALWAYS call recordUserIntent with category 'unimplemented_feature' and a detail describing the ask. Then be honest and short: "Not wired up yet — you can do it from the [Trips/Profile/Passport] tab for now." Don't invent permanent limitations like "I only have your trip info" — that misrepresents the product. The capability is coming; for now the user does it elsewhere in the app.
 - For any other notable signal (a strong opinion, a feature idea, a specific complaint), call recordUserIntent with category 'other_signal' silently. This is just a heads-up to the founder, the user never sees it.
 
@@ -164,6 +164,49 @@ const TOOLS: Anthropic.Messages.Tool[] = [
         gymId: { type: 'string' },
       },
       required: ['tripId', 'gymId'],
+    },
+  },
+  {
+    name: 'recordUserIntent',
+    description: 'Fire silently when user shows demand for something FitRoam does not yet do. Categories: out_of_scope_city (Berlin, Paris, Tokyo etc), unimplemented_feature (rating gyms, advanced filters, etc), other_signal (anything notable). The user does NOT see this — it logs the signal to the founder. Always call this when you decline a request, BEFORE telling the user FitRoam does not cover that. Pass a detailed detail field so the founder understands the ask.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        category: { type: 'string', enum: ['out_of_scope_city', 'unimplemented_feature', 'other_signal'] },
+        detail: { type: 'string', description: 'Verbatim or paraphrased user ask, in enough detail to understand the demand.' },
+      },
+      required: ['category', 'detail'],
+    },
+  },
+  {
+    name: 'logVisit',
+    description: 'Log a gym visit (passport stamp) on the user behalf. Use when the user says they went or are going to a specific gym, e.g. "I went to PureGym yesterday" or "log my visit to SWEAT440 today". REQUIRES a verified gym UUID from searchGyms first — never log a visit for an unverified Google gym. If the user mentions an ambiguous gym name (e.g. "PureGym" in London has many), call searchGyms first and confirm with the user. visitedDate is ISO date YYYY-MM-DD; translate "today" / "yesterday" yourself.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        gymId: { type: 'string', description: 'Verified gym UUID from searchGyms. Must be verified-DB origin, not a Google place_id.' },
+        accessType: { type: 'string', enum: ['day_pass', 'monthly'], description: 'Type of access. Default to day_pass for casual mentions.' },
+        visitedDate: { type: 'string', description: 'Date of visit in YYYY-MM-DD format. Translate "today" / "yesterday" / "last Friday" yourself.' },
+      },
+      required: ['gymId', 'accessType', 'visitedDate'],
+    },
+  },
+  {
+    name: 'updateProfile',
+    description: 'Update a field on the user profile. Use when the user explicitly asks to change their preferences, e.g. "change my primary activity to lifting" or "I moved to NYC". CRITICAL: confirm changes with the user before calling. Show what you understood and ask "yes / no" before firing. Never assume — wrong updates erode trust. Only one field updated per call.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        field: {
+          type: 'string',
+          enum: ['primaryActivity', 'citySlug', 'priorities', 'maxDistanceMinutes', 'trainingPattern'],
+          description: 'Which profile field to update. Other fields not exposed via AI.',
+        },
+        value: {
+          description: 'New value for the field. primaryActivity is a string (e.g. "lifting"); citySlug is london-gb/newyork-us/miami-us; priorities is a string array; maxDistanceMinutes is a number; trainingPattern is a string.',
+        },
+      },
+      required: ['field', 'value'],
     },
   },
   {
@@ -564,6 +607,105 @@ async function removeGymFromTripImpl(
 }
 
 
+async function recordUserIntentImpl(
+  userId: string,
+  args: { category: string; detail: string },
+  context: { userName: string | null; userEmail: string | null },
+) {
+  try {
+    await sendUserIntentAlert({
+      userId,
+      userName: context.userName,
+      userEmail: context.userEmail,
+      category: args.category,
+      detail: args.detail,
+    });
+    return { ok: true, noted: true };
+  } catch (err) {
+    console.warn('[concierge] User intent alert failed:', err);
+    return { ok: true, noted: true }; // never fail the AI loop on alert failure
+  }
+}
+
+async function logVisitImpl(
+  userId: string,
+  args: { gymId: string; accessType: string; visitedDate: string },
+) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(args.gymId)) {
+    return { ok: false, error: 'Cannot log visits for unverified gyms. Call searchGyms and confirm a verified gym first.' };
+  }
+  const gym = await prisma.gym.findUnique({
+    where: { id: args.gymId },
+    select: { id: true, name: true, citySlug: true },
+  });
+  if (!gym) {
+    return { ok: false, error: 'Gym not found in our database.' };
+  }
+  const parsed = new Date(args.visitedDate);
+  if (isNaN(parsed.getTime())) {
+    return { ok: false, error: 'visitedDate must be a valid ISO date (YYYY-MM-DD).' };
+  }
+  const expectedEnd = new Date(parsed);
+  if (args.accessType === 'monthly') {
+    expectedEnd.setDate(expectedEnd.getDate() + 30);
+  }
+  const access = await prisma.gymAccess.create({
+    data: {
+      userId,
+      gymId: gym.id,
+      accessType: args.accessType,
+      citySlug: gym.citySlug ?? 'unknown',
+      activatedAt: parsed,
+      expectedEndDate: expectedEnd,
+      status: 'confirmed',
+      confirmedAt: new Date(),
+    },
+    select: { id: true, accessType: true, activatedAt: true },
+  });
+  return {
+    ok: true,
+    visitId: access.id,
+    gymName: gym.name,
+    visitedDate: args.visitedDate,
+    accessType: args.accessType,
+  };
+}
+
+async function updateProfileImpl(
+  userId: string,
+  args: { field: string; value: any },
+) {
+  const ALLOWED_FIELDS = ['primaryActivity', 'citySlug', 'priorities', 'maxDistanceMinutes', 'trainingPattern'];
+  if (!ALLOWED_FIELDS.includes(args.field)) {
+    return { ok: false, error: `Field "${args.field}" is not updateable via AI. Allowed: ${ALLOWED_FIELDS.join(', ')}` };
+  }
+  // citySlug must be in allowlist
+  if (args.field === 'citySlug' && !CITY_SLUGS.includes(args.value as any)) {
+    return { ok: false, error: `Invalid citySlug. Allowed: ${CITY_SLUGS.join(', ')}` };
+  }
+  // priorities must be array
+  if (args.field === 'priorities' && !Array.isArray(args.value)) {
+    return { ok: false, error: 'priorities must be an array of strings.' };
+  }
+  // maxDistanceMinutes must be number
+  if (args.field === 'maxDistanceMinutes' && typeof args.value !== 'number') {
+    return { ok: false, error: 'maxDistanceMinutes must be a number.' };
+  }
+
+  const updates: any = { [args.field]: args.value };
+  const profile = await prisma.userProfile.upsert({
+    where: { userId },
+    update: updates,
+    create: { userId, ...updates },
+  });
+  return {
+    ok: true,
+    field: args.field,
+    newValue: args.value,
+    profileUpdatedAt: profile.updatedAt,
+  };
+}
+
 async function loadUserContext(userId: string): Promise<string> {
   const [user, profile, recentTrips] = await Promise.all([
     prisma.user.findUnique({ where: { id: userId } }),
@@ -697,6 +839,12 @@ async function runAgent(
       let result: any
       if (tu.name === 'searchGyms') {
         result = await searchGymsImpl(tu.input as any)
+        } else if (tu.name === 'recordUserIntent') {
+          result = await recordUserIntentImpl(userId, tu.input as any, { userName: user.name, userEmail: user.email });
+        } else if (tu.name === 'updateProfile') {
+          result = await updateProfileImpl(userId, tu.input as any);
+        } else if (tu.name === 'logVisit') {
+          result = await logVisitImpl(userId, tu.input as any);
       } else if (tu.name === 'saveTrip') {
         const saved = await saveTripImpl(userId, tu.input as any)
         if (saved.ok && saved.tripId) savedTripIds.push(saved.tripId)

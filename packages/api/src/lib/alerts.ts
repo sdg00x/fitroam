@@ -11,6 +11,7 @@ function getResend(): Resend | null {
 
 type BookingInterestAlertInput = {
   bookingInterestId: string
+  isVerified: boolean
   userId: string
   userEmail: string
   userName?: string | null
@@ -48,7 +49,9 @@ export async function sendBookingInterestAlert(
     return false
   }
 
-  const subject = `🟢 New early-access tap: ${input.gymName} (${input.userName ?? input.userEmail})`
+  const subject = input.isVerified
+    ? `🟢 New concierge waitlist tap: ${input.gymName} (${input.userName ?? input.userEmail})`
+    : `⭐ Verification request: ${input.gymName} (${input.userName ?? input.userEmail})`
 
   const lines = [
     `<h2>New booking interest captured</h2>`,

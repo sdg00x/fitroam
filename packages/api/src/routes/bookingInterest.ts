@@ -25,15 +25,25 @@ router.post('/', async (req, res, next) => {
     const userId = getUserId(req)
     if (!userId) return res.status(400).json({ error: 'Missing x-user-id' })
 
-    const { gymId, email, tripId, source } = req.body as {
+    const { gymId, gymPlaceId, gymName, gymAddress, email, tripId, source } = req.body as {
       gymId?: string
+      gymPlaceId?: string
+      gymName?: string
+      gymAddress?: string
       email?: string
       tripId?: string
       source?: string
     }
 
-    if (!gymId || !UUID_RE.test(gymId)) {
-      return res.status(400).json({ error: 'gymId must be a valid UUID' })
+    // Two acceptable shapes:
+    // 1. Verified path: gymId is a UUID matching a verified gym in our DB
+    // 2. Unverified path: gymPlaceId + gymName (snapshot of a Google result the user wants verified)
+    const isVerifiedPath = !!gymId && UUID_RE.test(gymId)
+    const isUnverifiedPath = !gymId && !!gymPlaceId && !!gymName
+    if (!isVerifiedPath && !isUnverifiedPath) {
+      return res.status(400).json({
+        error: 'Either gymId (UUID, verified) OR gymPlaceId+gymName (snapshot, unverified) required',
+      })
     }
     if (!email || typeof email !== 'string' || !email.includes('@')) {
       return res.status(400).json({ error: 'Valid email required' })
@@ -42,8 +52,10 @@ router.post('/', async (req, res, next) => {
       return res.status(400).json({ error: 'tripId must be a valid UUID if provided' })
     }
 
-    const gym = await prisma.gym.findUnique({
-      where: { id: gymId },
+    let gym: { id: string; name: string; verified: boolean; citySlug: string | null; dayPassUrl: string | null; dayPassPence: number | null } | null = null
+    if (isVerifiedPath) {
+      gym = await prisma.gym.findUnique({
+        where: { id: gymId! },
       // ALERT_CONTEXT_INLINE: fetch everything needed for both validation AND the alert email.
       // Prevents re-querying Prisma inside setImmediate, which was exhausting the connection pool.
       select: {
@@ -54,10 +66,11 @@ router.post('/', async (req, res, next) => {
         dayPassUrl: true,
         dayPassPence: true,
       },
-    })
-    if (!gym) return res.status(404).json({ error: 'Gym not found' })
-    if (!gym.verified) {
-      return res.status(400).json({ error: 'We only handle bookings for verified gyms.' })
+      })
+      if (!gym) return res.status(404).json({ error: 'Gym not found' })
+      if (!gym.verified) {
+        return res.status(400).json({ error: 'Verified-gym path called with an unverified gym. Use the gymPlaceId path instead.' })
+      }
     }
 
     // Fetch user once for alert context — single query, no setImmediate re-fetch later
@@ -79,11 +92,14 @@ router.post('/', async (req, res, next) => {
     const created = await prisma.bookingInterest.create({
       data: {
         userId,
-        gymId,
+        gymId: isVerifiedPath ? gymId! : null,
+        gymPlaceId: isUnverifiedPath ? gymPlaceId! : null,
+        gymNameSnapshot: isUnverifiedPath ? gymName! : null,
+        gymAddressSnapshot: isUnverifiedPath ? (gymAddress ?? null) : null,
         tripId: tripId ?? null,
         email: email.trim().toLowerCase(),
-        pricePence: PRICE_PENCE,
-        source: source ?? 'gym_card',
+        pricePence: isVerifiedPath ? PRICE_PENCE : 0,
+        source: source ?? (isVerifiedPath ? 'gym_card' : 'verification_request'),
         status: 'waitlisted',
       },
       select: { id: true, createdAt: true },
@@ -95,13 +111,14 @@ router.post('/', async (req, res, next) => {
       try {
         await sendBookingInterestAlert({
           bookingInterestId: created.id,
+          isVerified: isVerifiedPath,
           userId,
           userEmail: user?.email ?? email,
           userName: user?.name,
-          gymName: gym.name,
-          gymCity: gym.citySlug,
-          gymDayPassUrl: gym.dayPassUrl,
-          gymDayPassPence: gym.dayPassPence,
+          gymName: gym?.name ?? gymName!,
+          gymCity: gym?.citySlug ?? null,
+          gymDayPassUrl: gym?.dayPassUrl ?? null,
+          gymDayPassPence: gym?.dayPassPence ?? null,
           source: source ?? 'gym_card',
           pricePence: PRICE_PENCE,
           tripName: trip?.name ?? null,

@@ -294,7 +294,10 @@ model BookingInterest {
   id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId          String   @map("user_id") @db.Uuid
   tripId          String?  @map("trip_id") @db.Uuid
-  gymId           String   @map("gym_id") @db.Uuid
+  gymId           String?  @map("gym_id") @db.Uuid
+  gymPlaceId       String?  @map("gym_place_id")
+  gymNameSnapshot  String?  @map("gym_name_snapshot")
+  gymAddressSnapshot String? @map("gym_address_snapshot")
   email           String
   pricePence      Int      @map("price_shown_pence")
   source          String   @default("gym_card")
@@ -303,7 +306,7 @@ model BookingInterest {
 
   user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   trip Trip? @relation(fields: [tripId], references: [id], onDelete: SetNull)
-  gym  Gym   @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  gym  Gym?  @relation(fields: [gymId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([gymId])
