@@ -1298,3 +1298,78 @@ These were raised during real-device testing and explicitly deferred:
 - Pilates / yoga support
 
 **Target: 7-10 days to dual-platform closed beta.**
+
+---
+
+## Day 12 — June 9, 2026 (Option C snapshot persistence + booking modal fix + chat history restore fix)
+
+Continuation of Day 11's open release-blocker. Closed beta blocker was: Google-fallback AI responses rendering as markdown asterisk walls instead of structured gym cards. Resolved tonight via Option C architecture. Two downstream bugs surfaced and were fixed in the same session.
+
+### Shipped — backend (1 commit, `aa25a8c`)
+
+**Option C: snapshot persistence for Google-fallback gyms**
+
+- Schema migration via Supabase SQL editor: `ALTER TABLE chat_messages ADD COLUMN google_place_ids TEXT[];`. Prisma schema synced: `googlePlaceIds String[] @default([]) @map("google_place_ids")`. `prisma generate` ran.
+- New helper `extractGoogleGymsFromTools(toolTurns)` reads the persisted `tool_results` JSONB column, finds the most recent `searchGyms` tool result, and returns a Map of `{placeId → ChatGym}` snapshots. Looks for matching `tool_use_id` to handle multiple searchGyms calls in one turn.
+- `respond` tool description updated: AI told to include both verified UUIDs AND Google place IDs in `gymIds[]`. The mobile UI renders both as cards.
+- POST `/threads/:id/messages`: splits parsed.gymIds via UUID regex into `verifiedUuids` (DB-hydrated via `prisma.gym.findMany`) and `googlePlaceIds` (snapshot-hydrated via `extractGoogleGymsFromTools`). Combines in original AI-ranked order before returning. Persists both columns.
+- GET `/threads/:id/messages`: rebuilds gym objects per message by combining verified DB hydration + per-message toolResults snapshot extraction.
+
+**bookingInterest POST response fix**
+
+- Response was dereferencing `gym.name` unconditionally even on the unverified path where `gym` is null (only populated for verified path). Threw "Cannot read properties of null (reading 'name')" — that exact error surfaced inside the BookingInterestModal's error phase.
+- Fix: response now branches on `isVerifiedPath` for `pricePence` and `gymName` fields. Unverified path uses the `gymName` input snapshot, pricePence=0.
+
+### Shipped — mobile (1 commit, `240eb6d`)
+
+**Chat history restore fix**
+
+- Bug: when restoring a cached thread on mount, the early-return after successful `loadThread` skipped populating the threads list. Chat history sheet showed stale or empty data; tapping a thread either did nothing or dumped user back to the landing screen.
+- Fix: after successful cache restore, still fetch + setThreads so the sheet reflects server state.
+- Removed temporary [DEBUG] console.log lines added during diagnosis (handlePickThread, loadThread tracking).
+
+### Verified end-to-end
+
+- New account ("Samuel"), new chat, "I'm in London central need lifting gym before 8pm 45 min" → AI returned Google-fallback gyms rendered as cards with outline-style "Notify me when we cover this gym" buttons. NOT as markdown asterisk wall.
+- Tapped Notify button on unverified gym → modal completed without error, success state shown, alert email landed.
+- Closed app fully, reopened → cached thread restored AND chat history sheet populates with all prior threads.
+- Tapped thread in sheet → sheet closes, conversation appears.
+
+### Lessons logged (today's specific failures)
+
+- **`extractGoogleGymsFromTools` declaration silently lost mid-session.** Initial Option C patch reported "helper added" but a subsequent edit overwrote the file from disk and the helper disappeared. Caught only via `curl` returning 500 with `ReferenceError`. Lesson: when patch scripts touch the same file in sequence, the LAST patch's understanding of the file determines what survives. Going forward: re-read the file before EACH patch script writes — or use append-only operations for helper additions.
+- **My own placeholder text caused a fake bug diagnosis.** I sent a curl with `x-user-id: 2661d69e...` (literal three dots) and Prisma threw a UUID parse error. Spent diagnostic energy theorising it was an Option C side-effect when actually it was my malformed command. Reinforces Day 9/10 PASTE_X lesson — every command Claude provides MUST ship with real values, never placeholders.
+- **Apostrophe-in-single-quoted-JS-string trap, attempt 3 in 3 sessions.** Same mistake despite logging it twice. Going forward: any string with apostrophes uses double-quotes or backticks, period. No exceptions.
+- **Scope-creep at hour 6+ creates session-wide instability.** Day 11 evening session went from "60 min cleanup" to 11+ hours, shipped 14 items. The cumulative effect: regressions compounded across surfaces, each individually small but together producing a fragile system. Lesson: hard-lock scope at session start, additions require explicit re-scope check, sessions over 4 hours should pause for a verification pass before continuing.
+
+### Pre-existing issues still open (carried)
+- Prisma drift on Supabase extensions
+- `tsconfig.json moduleResolution: bundler` blocks `tsc --noEmit` as CI check
+- Prisma 5.22 → 7 upgrade available (defer)
+- `[Gate]` console.log in `app/_layout.tsx` (Phase 5)
+- Orphan onboarding files lifestyle/budget/training/facilities (Phase 5)
+- `react-native-sse` installed but unused
+- ADMIN_USER_IDS hardcoded — env var (v1.1)
+
+### Open follow-ups (next session)
+
+- **Multi-gym hero pattern**: AI sometimes recommends 3-4 gyms in flowing prose during a saveTrip turn instead of calling searchGyms + returning structured gymIds. System prompt tuning: when discussing >1 gym to a user, AI should call searchGyms first and put IDs in gymIds, not enumerate in prose.
+- **AI re-call on "show me them"**: When user says "let me see them" after a prior turn mentioned gyms in prose, AI doesn't re-call searchGyms to surface them as cards. System prompt should teach the AI to re-search when the user expresses interest in seeing options.
+- **Chat thread delete UX**: User can't clean up stale test threads. Cheap fix.
+- **Verification playbook ready for the weekend** (see VERIFICATION_PLAYBOOK.md).
+
+---
+
+## What's next
+
+### Founder weekend work (no Claude session)
+1. **Manual gym verification** — see VERIFICATION_PLAYBOOK.md in this repo
+2. Apple Developer Program signup ($99/year)
+3. Google Play Console signup ($25)
+
+### Next coding session (pick one)
+1. Multi-gym hero pattern + "show me them" AI behavior tuning
+2. Pre-TestFlight cleanup (remove [Gate] log, delete orphan onboarding files, single API_BASE env var, ToS/Privacy drafts, App Store/Play metadata)
+3. First `eas build --platform ios` + `eas build --platform android`
+
+**Target: dual-platform closed beta in testers' hands within 7-10 days from manual verification completion.**
