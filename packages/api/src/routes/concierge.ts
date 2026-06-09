@@ -228,6 +228,44 @@ const TOOLS: Anthropic.Messages.Tool[] = [
 ]
 
 // ---------- Tool implementations ----------
+function extractGoogleGymsFromTools(toolTurns) {
+  const out = new Map()
+  if (!Array.isArray(toolTurns)) return out
+  for (const turn of toolTurns) {
+    const calls = Array.isArray(turn?.assistantContent) ? turn.assistantContent : []
+    const results = Array.isArray(turn?.toolResults) ? turn.toolResults : []
+    for (let i = 0; i < calls.length; i++) {
+      const call = calls[i]
+      if (call?.type !== "tool_use" || call?.name !== "searchGyms") continue
+      const matched = results.find((r) => r?.tool_use_id === call.id) ?? results[i]
+      if (!matched?.content) continue
+      let parsed
+      try {
+        parsed = typeof matched.content === "string" ? JSON.parse(matched.content) : matched.content
+      } catch { continue }
+      const gyms = Array.isArray(parsed?.gyms) ? parsed.gyms : []
+      for (const g of gyms) {
+        if (g?.id && !g.verified) {
+          out.set(g.id, {
+            id: g.id,
+            name: g.name,
+            address: g.address ?? "",
+            dayPass: !!g.dayPass,
+            dayPassPence: g.dayPassPence ?? null,
+            dayPassUrl: g.dayPassUrl ?? null,
+            websiteUrl: g.websiteUrl ?? null,
+            equipmentTags: Array.isArray(g.equipment) ? g.equipment : [],
+            photoUrls: [],
+            verified: false,
+            rating: g.rating ?? null,
+          })
+        }
+      }
+    }
+  }
+  return out
+}
+
 async function searchGymsImpl(args: {
   citySlug: string
   activity?: string
@@ -932,23 +970,31 @@ router.get('/threads/:id/messages', async (req, res, next) => {
       where: { threadId: thread.id },
       orderBy: { createdAt: 'asc' },
     })
-
-    const allIds = new Set<string>()
+    // Collect all verified UUIDs across all messages for batch DB hydration
+    const allUuids = new Set<string>()
     for (const m of rows) {
       if (Array.isArray(m.gymIds)) {
-        for (const id of m.gymIds as string[]) allIds.add(id)
+        for (const id of m.gymIds as string[]) allUuids.add(id)
       }
     }
-    const hydrated = await hydrateGyms([...allIds])
-    const byId = new Map(hydrated.map((g) => [g.id, g]))
-
-    const messages = rows.map((m) => ({
-      id: m.id,
-      role: m.role,
-      content: m.content,
-      gyms: Array.isArray(m.gymIds) ? (m.gymIds as string[]).map((id) => byId.get(id)).filter(Boolean) : [],
-      createdAt: m.createdAt,
-    }))
+    const hydrated = await hydrateGyms([...allUuids])
+    const verifiedById = new Map(hydrated.map((g) => [g.id, g]))
+    const messages = rows.map((m) => {
+      const verifiedUuids = Array.isArray(m.gymIds) ? (m.gymIds as string[]) : []
+      const googleIds = Array.isArray(m.googlePlaceIds) ? (m.googlePlaceIds as string[]) : []
+      const googleMap = extractGoogleGymsFromTools(m.toolResults)
+      const orderedIds = [...verifiedUuids, ...googleIds]
+      const gyms = orderedIds
+        .map((id) => verifiedById.get(id) ?? googleMap.get(id) ?? null)
+        .filter(Boolean)
+      return {
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        gyms,
+        createdAt: m.createdAt,
+      }
+    })
 
     res.json({ thread, messages })
   } catch (err) {

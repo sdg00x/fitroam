@@ -280,6 +280,7 @@ model ChatMessage {
   role      String   // 'user' | 'assistant'
   content   String
   gymIds    Json?    @map("gym_ids")
+  googlePlaceIds String[] @default([]) @map("google_place_ids")
   toolResults Json?    @map("tool_results")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 

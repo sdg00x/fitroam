@@ -131,8 +131,8 @@ router.post('/', async (req, res, next) => {
     res.json({
       ok: true,
       id: created.id,
-      pricePence: PRICE_PENCE,
-      gymName: gym.name,
+      pricePence: isVerifiedPath ? PRICE_PENCE : 0,
+      gymName: isVerifiedPath ? gym!.name : gymName!,
       createdAt: created.createdAt,
     })
   } catch (err) {
