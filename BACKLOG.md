@@ -78,23 +78,37 @@ See `PRODUCT_v5.md` and `BUILD_STATUS_v2.md` for the full reasoning.
 
 ---
 
-## v1.1 backlog (post-launch)
+## v1.1 backlog (post-launch — small upgrades, no architectural changes)
 
-- Routes-as-viewing (deferred from v1 — Day 4)
-  - 3-5 popular routes per city from OSM
-  - View-only, no tracking/creation/social/GPX
-  - Display on Trip Detail
-  - AI concierge route recommendation tool
-- Manual pricing layer for top 50-100 gyms per launch city (contractor work)
-- AI concierge price-on-demand via web fetch (Phase 2)
+**Auth & security**
+- Magic codes for auth (replace email-only signin). Required before any public release. (Day 4)
+
+**Concierge polish**
+- Streaming responses (proper SSE, per-tool status text). `react-native-sse` already installed. (Day 9, 10)
+- Concierge session 5 — trust patterns, edge cases, error states in chat. Wait until 20-50 testers reveal what to harden. (Day 9)
+- Voice input wiring (Expo Speech). Mic icon present but inert. (Day 7)
+- Conversation threading on prompt screen (each query currently fresh, no cross-thread continuity). (Day 6)
+
+**Mobile UX**
+- Floating AI FAB across Trips/Profile screens. Currently chat only reachable via Home tab. (Day 8)
+
+**Content & data**
+- Routes-as-viewing — 3-5 popular routes per city from OSM. View-only, no tracking/creation/social/GPX. Display on Trip Detail. AI concierge route recommendation tool. (Day 4)
+- Manual pricing layer expanded to top 50-100 gyms per launch city (contractor work). (Day 4)
+- AI concierge price-on-demand via web fetch. (Day 4)
+
+**Distribution**
+- External TestFlight (public links, 10k testers). Requires Apple App Review on first build. (Day 10)
+- Play Store public listing. (Day 10)
 
 ## v1.2 backlog
 
-- Strava integration (passport bridge, AI awareness)
-- User-generated content (gym reviews, categories, experiences) — gated on user base
+- 4th launch city (post-PMF signal)
 - Pilates / Yoga support (different match logic)
+- User-generated content (gym reviews, categories, experiences) — gated on user base
+- Strava integration (passport bridge, AI awareness)
 
-## v2 backlog (North Star)
+## v2 backlog (North Star — requires gym partnerships)
 
 - Transactional booking layer with partnered gym chains
 - Walk-in temporary access (the original product vision)
@@ -394,3 +408,968 @@ Total: ~7-8 sessions of build, plus the user's weekend verification work.
 
 ### Diagnostics still in code (remove before TestFlight)
 - [Gate] console.log in app/_layout.tsx
+
+---
+
+## Day 6 — May 28 (City constraint + day-pass schema foundation)
+
+### Shipped — backend
+- `src/config/cities.ts` — single source of truth for launch cities. Convention `{city}-{country}` lowercase (matches existing `gym_access` data): `london-gb`, `newyork-us`, `miami-us`. Exports `CITIES`, `CITY_SLUGS`, `isValidCitySlug()`.
+- `Gym` schema — six new columns (applied via direct SQL to dodge Prisma drift-reset, NOT in migration history): `citySlug` (nullable, verification/analytics tag), `dayPass` (bool), `dayPassPence` (int?), `dayPassUrl` (string?), `verified` (bool default false), `verifiedAt` (timestamptz?). 290 existing rows intact.
+- `UserProfile` schema — `citySlug` (nullable, no default — a defaulted city is a silent wrong answer).
+- `/api/profile` PATCH — validates `citySlug` against allowlist, 400s on invalid with `allowed` list, writes valid ones. Serializer returns `citySlug`. Verified end-to-end: `paris-fr` rejected, `london-gb` writes.
+
+### Decisions locked
+- Day-pass fact lives on `Gym`, not `PriceReport`. Canonical one-per-gym truth (what weekend verification fills, what AI quotes). `PriceReport` stays as the price-history/observation log for later.
+- Match route flips to DB-first with radius filtering — DEFERRED to its own session. Current `/api/gyms` reads live Google Places via `fetchNearbyGyms`, not the DB. Plan: PostGIS `ST_DWithin` against existing lat/lng (no stored geography column at 300-gym scale), verified gyms ranked first, Google as tagged-unverified fallback for thin areas.
+- Concierge/auto-book model — PARKED pending demand data. Schema supports it; do not build. When ready: test via FAKE DOOR ("sort it for me" -> waitlist, zero money, zero legal surface), measure intent rate. Only if intent >~20%: UK solicitor, Stripe Connect, agent-of-record ToS (buy in USER's name w/ consent, never FitRoam's; never hold raw card data; liability capped not excluded). Rejected outright: charging more then buying cheaper pass (misrepresentation), self-drafted "zero liability" waivers (void under UCTA), typing users' raw cards into gym sites (PCI breach).
+
+### Pre-existing issues found (log, don't chase)
+- Prisma drift: Supabase ships postgis/pgcrypto/pg_stat_statements/supabase_vault not in migration history -> `migrate dev` wants a destructive reset. Real fix: `prisma migrate resolve` to baseline. Until then, schema changes go via direct SQL + `prisma generate`.
+- `tsconfig.json` line 2: `moduleResolution: bundler` incompatible with current `module` -> `tsc --noEmit` can't run as CI check. Runtime fine (tsx ignores it).
+- Prisma 5.22 -> 7 upgrade available. Do NOT do mid-build.
+- `[Gate]` console.log still in `app/_layout.tsx` (remove Phase 5).
+
+### Next session
+- Onboarding city-picker step (mobile) — only user-facing piece of city constraint left. Adds screen writing `citySlug` via `useProfile().save()`. Match existing onboarding pattern. Wire into `app/onboarding/_layout.tsx`. Note: onboarding still OLD 5-step flow, not post-pivot 3-step — trim is separate.
+- Backfill `citySlug` on 290 gyms — weekend verification work. London -> `london-gb` etc. Nottingham rows (pre-pivot leftovers) -> null or delete.
+
+### Day 6 — afternoon addendum (mobile onboarding + pivot bug fixes)
+
+Shipped:
+- 3-step onboarding live: city -> activity (style.tsx) -> priorities. `city.tsx` writes citySlug (london-gb/newyork-us/miami-us). priorities.tsx now finishes onboarding (sets onboarded:true, routes to home). lifestyle/budget/training left on disk unreferenced (delete in Phase 5).
+- Verified end-to-end on device: welcome -> signup -> city -> activity -> priorities -> Home, clean.
+
+Latent pivot bugs found + fixed (all from Day 5 `mv` file moves that didn't update imports/routes):
+- `results.tsx` imports were `../../src` (two-level) but file is now one level deep -> `../src`. 7 paths fixed.
+- `(tabs)/` had NO index route — pivot moved (tabs)/index.tsx to results.tsx, so navigating to bare /(tabs) hit unmatched-route. Added (tabs)/index.tsx redirecting to home; also navigate to /(tabs)/home explicitly.
+- Added app/index.tsx root redirect (no root route -> unmatched on boot).
+
+Real runtime bugs found + fixed:
+- ProfileProvider: `lastUserIdRef` initialized to null; on first run null===null made the guard skip before setting loading:false -> profileLoading stuck true forever -> AuthGate never ran. Fixed: init ref to undefined sentinel.
+- welcome.tsx had its own useEffect + onComplete navigation racing the AuthGate -> three navigations in one tick -> unmatched route on signup. Stripped welcome's navigation; AuthGate is now sole router.
+
+Lesson: AuthGate must be the single source of routing truth — no screen should navigate on auth/onboard state, only the gate. And `mv` during the pivot left a trail of broken import paths / missing routes that surface one-at-a-time when the bundler reaches each file.
+
+Still in code (remove Phase 5): original [Gate] console.log in _layout.tsx (predates today).
+
+### Home rebuild — final direction (build next session)
+
+LOCKED:
+- Two-screen push (NOT a bottom sheet). Top-right icon pushes /dashboard. Standard expo-router push, back gesture returns to prompt. Faster build, no sheet lib, no gesture conflicts.
+- Prompt screen = standard chat-app layout for user familiarity. Input bottom-anchored, mic, green Ask button, conversational placeholder showing example query syntax ("London 3 days, Miami 2, upper body, under £70"). Reference shape closer to Perplexity than ChatGPT: chat-feel input, structured results output.
+- Each query is FRESH — no conversation thread/history on the prompt screen in v1. Like a search bar. Tap Ask -> push to /results -> back returns to empty prompt. Simpler state, no multi-turn context to manage. Threading is a v1.x feature if users ask.
+- Placeholder + brand framing make purpose unmistakable: this is "find gyms when you travel," not a general chatbot. Avoids training users to expect open-ended chat.
+- Dashboard screen = current Home cards (training, top match, passport, etc.) almost as-is. Reached via top-right ti-layout-dashboard icon. Standard back to return.
+- Open question for build: does the greeting ("Hey Dan") stay on prompt or move to dashboard? Lean toward keeping on prompt — warm anchor, doesn't compete with input.
+
+### Home rebuild — visual locked
+
+Prompt screen layout:
+- Top: "FitRoam" wordmark left of dashboard icon (ti-layout-dashboard, top-right). Single tap pushes /dashboard.
+- Middle: greeting ("Where are you training, [name]?") + one-line purpose statement + 2-3 "TRY" example prompts (tappable, auto-fill the input).
+- Bottom-anchored: pill-shaped input with mic icon left, "Message FitRoam…" placeholder, circular green send button (ti-arrow-up) right. Matches ChatGPT/Claude/Perplexity convention for instant familiarity.
+- No tab bar on this screen — prompt owns the full viewport.
+
+Dashboard screen layout:
+- Top: back chevron left, "Your stuff" title center, empty right slot.
+- Cards stack: today's training, next trip, top match, passport (current Home cards, minus the weather widget).
+- Standard expo-router back returns to prompt.
+
+Not included in v1:
+- Conversation thread / history (each query fresh)
+- Weather widget (drop unless it earns its place later)
+- Voice input wiring (mic icon present, Expo Speech integration deferred — text input works)
+
+---
+
+## Day 6 — May 28, 2026 (CONSOLIDATED — supersedes scattered Day 6 entries above)
+
+Long session. Three things happened: backend city constraint shipped, mobile onboarding trimmed and working, three latent pivot bugs cleared. Plus the Home rebuild direction is now locked to a buildable spec.
+
+### Backend — city constraint (DONE, tested end-to-end)
+- `src/config/cities.ts` — single source of truth for launch cities. Convention `{city}-{country}` lowercase (matches existing `gym_access.city_slug` data): `london-gb`, `newyork-us`, `miami-us`. Exports `CITIES`, `CITY_SLUGS`, `isValidCitySlug()`.
+- `Gym` schema — six new columns (applied via direct SQL to dodge Prisma drift-reset, NOT in migration history): `citySlug` (nullable, verification/analytics tag), `dayPass` (bool), `dayPassPence` (int?), `dayPassUrl` (string?), `verified` (bool default false), `verifiedAt` (timestamptz?). 290 existing rows intact.
+- `UserProfile` schema — `citySlug` (nullable, no default — a defaulted city is a silent wrong answer).
+- `/api/profile` PATCH — validates `citySlug` against allowlist, 400s on invalid with `allowed` list, writes valid ones. Serializer returns `citySlug`. Verified end-to-end: `paris-fr` rejected, `london-gb` writes.
+
+### Mobile — 3-step onboarding (DONE, walked on device)
+- New `app/onboarding/city.tsx` (step 1 of 3) — three city buttons, writes `citySlug`.
+- `style.tsx` repurposed as activity step (step 2 of 3) — content unchanged, renumbered.
+- `priorities.tsx` is now the finish step (step 3 of 3) — sets `onboarded: true`, routes to `/(tabs)/home`.
+- `_layout.tsx` rewired: city -> style -> priorities only.
+- `lifestyle/budget/training` left on disk, unreferenced. Delete in Phase 5.
+- Flow verified on device: welcome -> signup -> city -> activity -> priorities -> Home, clean.
+
+### Latent pivot bugs found + fixed (all from Day 5 `mv` file moves)
+- `results.tsx` imports were `../../src/...` (two-level) but file is now one level deep. 7 paths fixed to `../src/...`.
+- `(tabs)/` had NO index route — the pivot moved `(tabs)/index.tsx` to `results.tsx`, so navigating to bare `/(tabs)` hit the unmatched-route fallback. Added `(tabs)/index.tsx` redirecting to home; also navigate to `/(tabs)/home` explicitly from priorities + AuthGate.
+- Added `app/index.tsx` root redirect (no root route -> unmatched on boot).
+
+### Real runtime bugs found + fixed
+- `ProfileProvider`: `lastUserIdRef` initialised to `null`. On first run, `null === null` made the guard skip before `setLoading(false)` -> profileLoading stuck true forever -> AuthGate never ran. Fixed: init ref to `undefined` sentinel.
+- `welcome.tsx` had its own useEffect + onComplete navigation racing the AuthGate. Three navigations in one tick on signup -> unmatched route. Stripped welcome's navigation. AuthGate is now the sole router.
+
+### Decisions locked
+- Day-pass canonical fact lives on `Gym`, not `PriceReport`. `PriceReport` stays as price-history/observation log for later.
+- Match route flip to DB-first with radius filtering DEFERRED to its own session. Plan: PostGIS `ST_DWithin` against existing lat/lng (no stored geography column at 300-gym scale), verified gyms ranked first, Google as tagged-unverified fallback for thin areas.
+- Concierge/auto-book PARKED pending demand data. When ready: FAKE DOOR ("sort it for me" -> waitlist, zero money, zero legal surface) measures intent rate. Only if intent >~20%: UK solicitor + Stripe Connect + agent-of-record ToS (buy in USER's name with consent, never FitRoam's; never hold raw card data; liability capped not excluded). Rejected outright: charging more then buying cheaper pass (misrepresentation), self-drafted "zero liability" waivers (void under UCTA), typing users' raw cards into gym sites (PCI breach).
+
+### Home rebuild — direction FULLY LOCKED (build next session)
+- Prompt is Home. Dashboard is a separate screen pushed via top-right `ti-layout-dashboard` icon. Two-screen push (NOT a bottom sheet) — faster build, no sheet lib, no gesture conflicts.
+- Prompt screen layout: top wordmark + dashboard icon; middle greeting ("Where are you training, [name]?") + purpose line + 2-3 tappable "TRY" example prompts (auto-fill input on tap); bottom-anchored pill input with mic, "Message FitRoam…" placeholder, circular green send button (ti-arrow-up). Matches ChatGPT/Claude/Perplexity conventions for instant familiarity.
+- Each query is FRESH — no conversation thread on prompt screen in v1. Tap Ask -> push to `/results` -> back returns to empty prompt. Threading is a v1.x feature if users ask.
+- Dashboard screen = current Home cards (training, next trip, top match, passport) almost as-is, minus the weather widget. Left chevron back returns to prompt.
+- No tab bar on the prompt screen — prompt owns the full viewport.
+- Mic icon present, Expo Speech wiring deferred — text input works for v1.
+
+### Lessons logged
+- AuthGate must be the single source of routing truth — no screen should navigate on auth/onboard state, only the gate.
+- `mv` during the pivot left a trail of broken import paths and missing routes that surfaced one-at-a-time when the bundler reached each file. Pattern: file moves require import-path audit AND route-resolution audit, not just the move.
+- Held the concierge legal line under sustained pressure from external "growth coach" sources that repeatedly reintroduced conceded risks in new forms (virtual cards -> typing user's real card; "zero liability" waivers; "charge £60 buy £40"). The constraints are real; the workarounds keep trying to route around them. Evaluate against FitRoam's actual constraints, not source confidence.
+
+### Pre-existing issues found (log, don't chase)
+- Prisma drift: Supabase ships `postgis`/`pgcrypto`/`pg_stat_statements`/`supabase_vault` not in migration history -> `migrate dev` wants a destructive reset. Real fix: `prisma migrate resolve` to baseline. Until then, schema changes go via direct SQL + `prisma generate`.
+- `tsconfig.json` line 2: `moduleResolution: bundler` incompatible with current `module` -> `tsc --noEmit` can't run as CI check. Runtime fine (tsx ignores it).
+- Prisma 5.22 -> 7 upgrade available. Do NOT do mid-build.
+- Original `[Gate]` console.log in `_layout.tsx` (predates today, slated for Phase 5).
+- "Set your training pattern" card on Home references `trainingPattern`, which the trimmed onboarding no longer collects. Decide on Home rebuild: optional nudge or cut.
+
+---
+
+## What's next (priority order)
+
+### Next session (pick one to start)
+1. **Home rebuild** — build the prompt screen + dashboard screen per locked spec above. Highest-visibility piece, defines the AI-first product.
+2. **Match route DB-first flip** — PostGIS radius query, verified gyms ranked first, Google as fallback. Unblocks the verification work meaning something at runtime.
+
+### Founder weekend work (no Claude session needed)
+- Backfill `citySlug` on 290 gyms. London gyms -> `london-gb`, etc. Nottingham rows (pre-pivot leftovers) -> null or delete.
+- Begin manual verification of top ~100 gyms per launch city (~300 total): day pass yes/no, price (`dayPassPence`), deep-link URL (`dayPassUrl`), equipment tags, set `verified: true` + `verifiedAt`.
+
+### Sessions after Home rebuild
+3. **AI concierge build** (4-5 sessions) — `/api/concierge` endpoint with Claude + tools (`searchGyms`, `getUserProfile`, `saveAsTrip`), streaming status, wired to `/results` screen. Match engine v2 becomes the AI's ranker.
+4. **Fake door for concierge auto-book** — measure intent rate, no money, no legal surface.
+5. **Pre-TestFlight cleanup** — remove diagnostic `[Gate]` log, empty/error state audit, ToS + Privacy drafts, App Store metadata, delete onboarding files `lifestyle/budget/training`.
+6. **TestFlight setup** — Apple Developer Program, signing, first build, closed beta with 20-50 users across 3 cities.
+
+### v1.1+ (post-launch, deferred)
+- Magic codes for auth (current email-only is closed-beta-only).
+- Routes-as-viewing.
+- Strava/Whoop integrations.
+- User-generated content (gym reviews).
+- Pilates/Yoga support.
+- 4th city.
+
+---
+
+## Day 7 — May 29, 2026 (Home rebuild — AI-first prompt screen)
+
+### Shipped — Home is now the AI prompt
+
+- `app/(tabs)/home.tsx` fully rewritten. Single job: AI prompt input. Old greeting/training/top-match/passport/next-trip cards removed (still accessible via Trips and Profile tabs — nothing deleted from the system, just unbundled from Home).
+- Layout: top-center brand row (waveform icon + "FitRoam" wordmark), centered greeting ("GOOD MORNING/AFTERNOON/EVENING" eyebrow + "Where are you training, {name}?" + purpose line), TRY section with 3 quoted example prompts, bottom-anchored input pill.
+- Examples are tap-to-fill-and-focus (not auto-submit) — teaches the prompt syntax instead of skipping past it.
+- ASK behavior: `router.push('/results', { prompt })`. Each query is fresh, no thread state on prompt screen.
+- Theme-aware throughout: uses `colors.background`/`surface`/`textPrimary`/`textSecondary`/`accent`/`accentText` from existing tokens. Light + dark mode both render correctly (verified via iOS sim Cmd+Shift+A toggle).
+
+### Shipped — brand waveform icon
+
+- New `src/components/WaveformIcon.tsx`. Inline SVG, 5 vertical bars (heights 6/12/18/12/6), `{ size, color }` props. Installed `react-native-svg` via `expo install` (matched to SDK 54).
+- Used in two places: top bar brand mark (size 20, accent color) and the mic CTA button (size 26, accentText on accent bg).
+- Same component → consistent brand language between logo and voice CTA.
+
+### Shipped — mic↔send swap CTA
+
+- Right-side button is the dominant visual element. 52×52 circle, accent green, soft shadow.
+- Empty input → green button shows waveform icon (mic-as-voice-CTA). Designed to feel "alluring" — encourages voice over typing as the default.
+- User starts typing → same button morphs to arrow-up (send). Same size, same green, same position — no jarring resize.
+- Mic press currently focuses the input (Expo Speech wiring still deferred to v1.x).
+
+### Shipped — /results placeholder
+
+- `app/results.tsx` fully rewritten. Old Explore UI (Nottingham match list, sort/filter chips, top-match card) scrapped. In git history if ever needed.
+- New layout: back chevron, user's prompt echoed at top in a "YOU ASKED" bubble, big centered placeholder with sparkles icon + "FitRoam AI is on the way" copy. Honest about the state — closed beta will see this for a session or two before concierge lands.
+
+### Shipped — tab + routing cleanup
+
+- Killed `app/(tabs)/dashboard.tsx`. No two-screen push pattern after all (briefly explored, then dropped on the call that AI-first means no escape hatch to legacy cards).
+- `(tabs)/_layout.tsx` rewritten: only HOME / TRIPS / PROFILE in the tab bar. `index.tsx` (the redirect file) hidden via `href: null`.
+- Bug fix in same file: `colors.isDark` was a no-op (it's `isDark` at top level of `useTheme()`, not nested). Active green tab now renders correctly in dark mode. Pre-existing, just caught while in here.
+
+### Decisions locked
+
+- **No dashboard screen.** Tempting to keep as a "backup" — that temptation is the same drift that produced routes/community/full-search anxiety over the past month. AI-first means one job on the headline screen. Old Home cards live on in their own tabs and via future AI tools (e.g. "what should I train today?" hits `useTodaySession`).
+- **Brand color stays `#c8ff57`** (existing accent token), not the brighter `#a8e635` briefly hardcoded. Honored the design system instead of forking it.
+- **Inline SVG over icon-font waveform.** Reusable component, exact shape match, no bundle bloat. One source of truth for the brand mark whether at 20px (top bar) or 26px (CTA).
+- **Examples tap-to-fill-and-focus, not auto-submit.** Teaching prompt syntax > demoing one example.
+- **ASK pushes to /results with prompt param, not stubbed with toast.** Wires the navigation end-to-end so concierge lands as a one-line swap from "show placeholder" to "call /api/concierge".
+
+### Lessons logged
+
+- The `node -e "..."` patching trick is a zsh quoting nightmare — backticks inside double-quoted shell strings, plus history-expansion on `!`, ate two attempts at home.tsx. Plain `cat > file <<'EOF'` heredocs are the safe default. Reach for node only when surgical edits inside a larger file demand it.
+- Sentimentality about deleted UI is a real cost. Felt the pull to keep the dashboard despite it contradicting the locked product framing. Pattern: when a "backup" or "fallback" screen feels protective, that's anxiety about the headline product, not a real user need. Cut it.
+
+### Files touched
+
+- `app/(tabs)/home.tsx` — full rewrite (AI prompt screen)
+- `app/(tabs)/_layout.tsx` — full rewrite (3-tab structure, isDark fix)
+- `app/(tabs)/dashboard.tsx` — deleted
+- `app/results.tsx` — full rewrite (AI placeholder)
+- `src/components/WaveformIcon.tsx` — new
+- `package.json` — `react-native-svg` added via `expo install`
+
+### Pre-existing issues still open (log, don't chase)
+
+- Prisma drift on Supabase extensions (postgis/pgcrypto/etc.). Schema changes still go via direct SQL + `prisma generate`.
+- `tsconfig.json` `moduleResolution: bundler` blocks `tsc --noEmit` as CI check.
+- Prisma 5.22 → 7 upgrade available, hold off mid-build.
+- `[Gate]` console.log still in `app/_layout.tsx`, remove Phase 5.
+- Onboarding files `lifestyle.tsx`, `budget.tsx`, `training.tsx`, `facilities.tsx` still on disk unreferenced. Delete in Phase 5.
+
+---
+
+## What's next (priority order)
+
+### Next session (pick one)
+1. **Match route DB-first flip** — PostGIS `ST_DWithin` against existing lat/lng, verified gyms ranked first, Google as fallback for thin areas. Unblocks the verification work meaning something at runtime, and the concierge will call this route as its `searchGyms` tool.
+2. **AI concierge build — session 1 of 4-5** — `/api/concierge` backend endpoint scaffold with Anthropic client, tool definitions (`searchGyms`, `getUserProfile`, `saveAsTrip`), system prompt v1. Mobile `/results` swaps from placeholder to live AI output.
+
+### Founder weekend work (no Claude session)
+- Backfill `citySlug` on 290 existing gyms (`london-gb` / `newyork-us` / `miami-us`; Nottingham rows → null or delete).
+- Begin manual verification of ~300 gyms across 3 cities: `dayPass` bool, `dayPassPence`, `dayPassUrl`, equipment tags, set `verified: true` + `verifiedAt`.
+
+### Sessions after that
+3. AI concierge sessions 2–5 (streaming status, full tool execution loop, multi-leg trip generation, polish + trust patterns)
+4. Fake door for concierge auto-book — "sort it for me" → waitlist, measure intent rate, no money, no legal surface
+5. Pre-TestFlight cleanup — remove `[Gate]` log, delete orphan onboarding files, empty/error state audit, ToS + Privacy drafts, App Store metadata
+6. TestFlight setup — Apple Developer Program, signing, first build, closed beta with 20-50 users across 3 cities
+
+---
+
+## Day 8 — May 29, 2026 (PM) (Concierge build session 1 — AI shipped end-to-end)
+
+Long session. Built the full concierge loop from zero, then iterated three times in response to real Dan-tests. The AI now plans trips, lists them, deletes them, takes initiative, and uses warm not-apologetic tone.
+
+### Shipped — backend
+
+- `src/routes/concierge.ts` — full endpoint rewrite, multi-iteration agent loop (max 6 iterations, hard cap on cost).
+  - POST /api/concierge/threads — create
+  - GET /api/concierge/threads — list user's chats
+  - GET /api/concierge/threads/:id/messages — full thread w/ hydrated gyms per assistant message
+  - POST /api/concierge/threads/:id/messages — send user msg, run agent loop, persist both messages, return optimistic shape
+- Old `POST /api/concierge` single-shot endpoint deleted.
+- DB schema: `ChatThread` + `ChatMessage` tables added via Supabase SQL editor (direct SQL, RLS enabled w/ no policies — service role bypasses it, fine for this arch). schema.prisma synced + `prisma generate` ran.
+- Conversation history: last 20 messages of a thread sent to Claude per turn. User context (name, home city, primary activity, priorities, recent trips with dates) prepended to the first user message so the AI always knows who it's talking to and what's already planned.
+- Model: `claude-sonnet-4-6`. Tool-use loop. Cost per query ~$0.01-0.03. $5 of credits covers ~200-500 dev queries.
+
+### Shipped — tools (4 total)
+
+1. **searchGyms** — filters by citySlug + day_pass=true, ranks by verified-first then ratingCount. Returns up to 10. Activity, budget (pence), neighborhood all optional.
+2. **saveTrip** — auto-creates Trip + TripLeg with city centroid coords (`src/config/cityCentroids.ts`). Dedupes by overlapping dates so AI can't double-save. Returns `{ deduped: true, tripId }` when matching trip exists.
+3. **listTrips** — reads user's trips + legs, returns date-formatted summary.
+4. **deleteTrip** — verifies ownership via userId match, then `prisma.trip.delete` (cascades to legs via FK).
+5. **respond** — structured-output tool that forces JSON-clean output. Solved the "Claude returns both prose AND code-fenced JSON" bug from earlier iteration — typed args from the SDK, no parsing ambiguity.
+
+### Shipped — system prompt (v3)
+
+- Voice: warm, conversational, never apologetic. Uses name naturally, not every message.
+- Behavior: TAKE ACTION. Save trips on first mention of city+dates, no permission asking. Call searchGyms on first city+activity hint.
+- Honest about unwired capabilities: "Not wired up yet — you can do it from the [Trips/Profile/Passport] tab for now." Explicitly forbids inventing permanent limitations like "I can only see your trip info" which misrepresents the product.
+- City constraint enforced: only London/NYC/Miami. Other cities mentioned plainly without apology.
+
+### Shipped — mobile
+
+- Massive rewrite of `app/(tabs)/home.tsx`. Home IS the chat now. Empty state (greeting + TRY chips) visible only when no messages. Thread view with scrollable history when messages exist. Bottom-anchored input.
+- `src/hooks/useChat.ts` — Provider-style hook (single shared state). Restores latest thread from server on mount, caches active thread ID in AsyncStorage. Optimistic user message rendering. `send` / `newThread` / `loadThread` / `refreshThreads` actions.
+- `src/components/ChatHistorySheet.tsx` — slide-up sheet listing all chats, "+ NEW CHAT" pill at top, active thread tagged "NOW", relative timestamps (just now / 11m ago / 3d ago).
+- `src/components/WaveformIcon.tsx` — already shipped Day 7, now used in 3 places (top bar logo, mic CTA, Home tab icon).
+- Visible "New chat" pill above thread (small action affordance for clearing context without opening history sheet).
+- `app/results.tsx` deleted (replaced by inline chat).
+- Home tab icon → waveform (was home-outline). Brand consistency with logo + mic.
+
+### Behavior verified end-to-end (curl + device)
+
+- "Hey" → warm clarifying question, no Hey-Dan eagerness
+- "I might go to Miami June 2-7 for lifting" → saveTrip called immediately, AI confirms trip saved, then searches gyms
+- Trips tab shows the auto-saved trip
+- "What trips do I have?" → listTrips called, real data returned
+- "Delete the Dubai trip" → AI calls listTrips (gets IDs), then deleteTrip, then confirms. Trip actually gone from DB.
+- Multi-turn context preserved: AI remembered Dubai ID across two turns
+- "Have I got any stamps this month?" → honest "not wired up yet" instead of fake permanent limitation
+- Light + dark mode both render correctly throughout
+
+### Lessons logged
+
+- **`tsx watch` is not infallible.** Server claimed to be running but was running stale code at one point. When AI behavior contradicts the prompt/tool definitions in the file, kill -9 the port and restart. Don't trust hot-reload alone for big file changes.
+- **Curl before tap.** Two cycles this session where I'd ship a change, you'd reload Expo, the device test would fail, and we'd diagnose — only to find the backend never actually had the change deployed. Going forward: curl-verify backend changes BEFORE testing on device. Faster feedback loop, fewer wasted Dan-test conversations.
+- **Big multi-anchor heredocs can fail silently if not pasted cleanly.** First attempt at adding listTrips/deleteTrip tools resulted in `grep -c` returning 0 — the heredoc never ran. Now defaulting to: paste heredoc → verify exits with success message → grep-check it landed → only then test behavior.
+- **The "scope drift in the same session" trap is real and you caught it twice today.** Deferred the floating AI button to its own session, deferred listVisits + updateProfile tools to next concierge session. Discipline > shipping more.
+- **Structured-output tools beat "respond in JSON" prompting.** The `respond` tool moved from "Claude usually emits clean JSON, sometimes wraps in code fences" to "Claude's args are SDK-typed, parser never breaks." Worth the 5 extra lines of tool definition.
+
+### Known issues to fix next concierge session
+
+- **Transient 500s on long threads** — 2 failed sends observed in one device-test session. Re-firing the same prompt via curl 5min later succeeded cleanly. Most likely upstream Anthropic blip or phone network jitter, not a code bug. Action: catch upstream Anthropic errors in the agent loop and retry once before bubbling 500, then surface a "tap to retry" affordance on the failed user-message bubble in mobile. Not blocking.
+- **AI loses tool-call context in long threads** — observed: AI re-called listTrips deep in thread and "apologized" for a deletion it had genuinely done earlier. Root cause: tool results aren't persisted alongside text in ChatMessage, so on rehydration the agent only sees prose history. Fix: add `toolResults JSONB` column to ChatMessage, replay as `tool_result` blocks in subsequent agent runs. Real architectural fix, session 2.
+- **Dedupe-on-update is wrong behavior.** When user updates trip dates ("actually June 3-8 not 2-7"), saveTrip returns `deduped: true` and AI surfaces internal language ("the system has your original dates locked in and flagged as duplicate"). Right behavior: detect date update intent → delete old trip + create new one transparently, or call `updateTrip` (not yet a tool).
+- **No streaming.** "Thinking…" placeholder shown while AI processes, but full reply only appears once complete. Adds 3-8s perceived latency vs streaming. Sessions 4-5 territory.
+- **`listVisits` / `updateProfile` / `addGymToTrip` not yet tools.** AI politely admits this now, but users will keep asking. Add when value:effort right.
+- **FAB across screens deferred.** Currently chat only reachable via Home tab. v1.1 backlog.
+
+### Files touched
+
+- `packages/api/src/routes/concierge.ts` — new + 3 major rewrites
+- `packages/api/src/config/cityCentroids.ts` — new
+- `packages/api/prisma/schema.prisma` — ChatThread + ChatMessage + User.chatThreads relation
+- `app/(tabs)/home.tsx` — full rewrite (chat surface)
+- `app/(tabs)/_layout.tsx` — Home icon → waveform
+- `app/results.tsx` — deleted
+- `src/hooks/useChat.ts` — new
+- `src/components/ChatHistorySheet.tsx` — new
+- `packages/api/package.json` — `@anthropic-ai/sdk` added
+
+### Pre-existing issues still open (carried)
+
+- Prisma drift on Supabase extensions
+- `tsconfig.json` `moduleResolution: bundler` blocks `tsc --noEmit`
+- Prisma 5.22 → 7 upgrade available, hold off
+- `[Gate]` console.log in `app/_layout.tsx` (Phase 5)
+- Orphan onboarding files `lifestyle/budget/training/facilities` (Phase 5)
+- `API_BASE` hardcoded in 5+ mobile files — move to single env var (Phase 5)
+
+---
+
+## What's next (priority order)
+
+### Next session (pick one)
+1. **Concierge session 2 polish** — diagnose the 500s, fix the dedupe-on-update bug (likely add `updateTrip` tool), add `listVisits` tool, swap "Thinking…" for a better loading state.
+2. **Match route DB-first flip** — PostGIS `ST_DWithin`, verified gyms first, Google fallback. Unblocks the manual verification work.
+3. **Floating AI FAB across screens** — modal-overlay pattern from this session's locked scope.
+
+### Founder weekend work (no Claude session)
+- Backfill `citySlug` on 290 existing gyms (london-gb / newyork-us / miami-us; Nottingham → null or delete)
+- Manual verification of ~300 gyms across 3 cities: dayPass, dayPassPence, dayPassUrl, equipmentTags, verified=true
+
+### Sessions after that
+4. AI concierge session 3-4 (streaming, addGymToTrip tool, full trip-edit tool surface)
+5. Fake door for concierge auto-book — measure intent rate, no money, no legal
+6. Pre-TestFlight cleanup — remove `[Gate]` log, delete orphan onboarding files, error states, ToS/Privacy, App Store metadata, single API_BASE env var
+7. TestFlight setup — Apple Developer Program, signing, first build, closed beta 20-50 users in 3 cities
+
+## Day 9 — June 1, 2026 (Concierge session 2 — tool persistence, smart saveTrip, listVisits, retry, loading copy)
+
+Six-step session, all shipped, end-to-end verified (curl + device).
+
+### Shipped — tool result persistence (architectural fix from Day 8)
+
+- New `tool_results` JSONB column on `chat_messages` (direct SQL via Supabase, schema.prisma synced, prisma generate ran). Stores per-turn `{assistantContent, toolResults}` arrays so tool_use + tool_result blocks survive thread rehydration.
+- `runAgent` in `concierge.ts` now accumulates `ToolTurn[]` across iterations and returns them in `AgentResult`. POST `/threads/:id/messages` persists `toolTurns` on the assistant `ChatMessage`. GET rebuild interleaves `assistant(tool_use)` + `user(tool_result)` blocks from history before the final assistant text.
+- Verified: thread with a `listTrips` call → "What was the ID of the NY trip?" → AI answered exact UUID, no re-call. Then "Delete the New York one." → AI called `deleteTrip` directly with the right ID, no clarifying re-list. Day 8's "AI loses tool-call context in long threads" bug is fixed.
+
+### Shipped — smart saveTrip
+
+- `saveTripImpl` returns `action: 'created' | 'updated' | 'noop'` instead of `deduped: true/false`. Overlap detection updates the existing `TripLeg` in place via `$transaction` rather than refusing to act.
+- System prompt + tool description rewritten to teach the AI about the new response shape, including handling date-change requests by calling `saveTrip` again.
+- Verified: "Save Miami June 20-23" → created. "Actually make it June 22-25" → updated in place (no duplicate row, no leaky "system deduplicated" language). AI prose clean: "Done — dates updated to June 22-25, Dan."
+
+### Shipped — deleteTrip hardening (uncovered + fixed mid-session)
+
+- The first smart-saveTrip test revealed a NEW bug: persisted toolResults showed Claude calling BOTH `saveTrip` and `deleteTrip` in the same turn on the just-saved trip. Preamble text claimed it was running saveTrip + searchGyms in parallel, but the actual second tool was deleteTrip. The new trip was correctly created and updated, then immediately deleted.
+- Root cause: nothing in the system prompt constrained `deleteTrip` to explicit user delete intent. Tool selection misfired during parallel tool calls.
+- Fix: prompt-level — hard rule that `deleteTrip` only fires on explicit user delete words ("delete", "remove", "cancel", "drop", "get rid of"). Date changes, updates, edits are NEVER deletes. Plus the tool description itself now says "Do NOT call alongside saveTrip in the same turn."
+- Verified post-fix: same test sequence produced zero `deleteTrip` calls. Two Miami trips in DB (untouched June 3-8, updated June 22-25).
+
+### Shipped — listVisits tool
+
+- New `listVisitsImpl` reads from `GymAccess` joined to `Gym`, returns up to 50 most-recent visits with gym name, address, citySlug, accessType, status (pending/confirmed/denied), visitedAt, confirmedAt. Shape mirrors the existing `/api/visits/all` route.
+- Tool definition added to TOOLS, dispatch case added to agent loop, system prompt's capabilities list updated: "list the user's gym visits (passport stamps)" moved from "cannot yet" to "can".
+- Verified: "Have I logged any gym visits yet?" → AI calls `listVisits`, gets empty array, replies honestly ("No stamps yet, Dan — your passport is blank!"). No "not wired up yet" leak.
+
+### Shipped — retry on upstream Anthropic errors
+
+- Backend: new `callAnthropicWithRetry` helper wraps `anthropic.messages.create`. `isTransientUpstreamError` returns true for 5xx, 429, and network errors (ETIMEDOUT/ECONNRESET/ECONNREFUSED/EAI_AGAIN, APIConnectionError, APIConnectionTimeoutError). On transient failure: 500ms sleep, retry once, then bubble. Wrap is inside the loop iteration — non-transient errors throw immediately, retries don't re-execute tools.
+- Mobile: `ChatMessage` now has optional `failed?: boolean`. The send catch branch sets `failed: true` on the optimistic bubble instead of mutating the message content. New `retrySend(messageId)` removes the failed bubble and re-calls `send` with the original content.
+- `MessageBlock` renders failed user bubbles at 55% opacity with a "Failed — tap to retry" link below in accent green.
+- Verified on device: airplane mode mid-send → bubble fades, retry link appears. Toggle back on, tap retry → message resends successfully.
+
+### Shipped — rotating loading copy
+
+- New `useLoadingCopy(active)` hook rotates through ['Thinking…', 'Checking your trips…', 'Searching gyms…', 'Pulling it together…'] every 2.5s while sending. Resets to index 0 when inactive.
+- Replaces the static "Thinking…" in the sending JSX block. No backend dependency — this is the cheap version. Real per-tool streaming is concierge session 3.
+- Verified on device: copy cycles smoothly during agent runs (3-8s typical).
+
+### Lessons logged
+
+- **Persisted tool results aren't just for context preservation — they're also the debugger.** Without `tool_results` in the DB, the speculative-deleteTrip bug would have looked like a Prisma or transaction issue. Reading the actual tool calls Claude made revealed the cause in 30 seconds. This pattern (persist the agent's reasoning trace, read it on bug reports) will keep paying off.
+- **Heredoc patches that write the file only at the END are dangerous when multi-anchor.** If any anchor fails mid-script, ALL prior in-memory replaces are lost AND there's no visible diff. Twice today a partial patch left the file in an inconsistent state (loading copy hook called but not declared). Going forward: write the file after each anchor (or fail fast with intermediate writes), or split multi-anchor patches into single-anchor scripts.
+- **The placeholder-substitution pattern in Claude's instructions (`PASTE_REAL_UUID_HERE`) kept tripping the workflow.** Multiple curls failed because the literal placeholder string was exported as the variable. Going forward: every command Claude provides ships with real values prefilled from the most recent tool output, no `PASTE_X` markers.
+- **`tsx watch` keeps biting** — multiple times today the watcher claimed reloaded but ran stale code. Default: kill the port and restart on every nontrivial backend edit. Five seconds of restart > debugging stale-code phantoms.
+- **Trusting the model's preamble text is wrong** — Claude said "I'll save and search for gyms" while actually calling save + delete. Audit toolResults, not assistant prose, when diagnosing weird behavior.
+
+### Files touched
+
+- `packages/api/prisma/schema.prisma` — `toolResults Json?` on ChatMessage
+- `packages/api/src/routes/concierge.ts` — full `runAgent` rewrite (persistence + replay), `saveTripImpl` smart-save, `listVisitsImpl` added, `callAnthropicWithRetry` wrapper, deleteTrip prompt hardening, system prompt capabilities updated, tool descriptions tightened
+- Supabase: `ALTER TABLE chat_messages ADD COLUMN tool_results JSONB` via SQL editor
+- `fitroam-mobile/src/hooks/useChat.ts` — `failed?: boolean` on ChatMessage, `retrySend` function exported, failure branch stops mutating content
+- `fitroam-mobile/app/(tabs)/home.tsx` — `useLoadingCopy` hook, MessageBlock signature accepts onRetry, failed user bubbles render retry affordance, loading text rotates
+
+### Pre-existing issues still open (carried)
+
+- Prisma drift on Supabase extensions
+- `tsconfig.json` `moduleResolution: bundler` blocks `tsc --noEmit` as CI check
+- Prisma 5.22 → 7 upgrade available (do NOT do mid-build)
+- `[Gate]` console.log in `app/_layout.tsx` (Phase 5)
+- Orphan onboarding files `lifestyle/budget/training/facilities` (Phase 5)
+- `API_BASE` hardcoded in 5+ mobile files (Phase 5)
+
+---
+
+## What's next (priority order)
+
+### Next session — pick one
+1. **Concierge session 3 — streaming** — Server-Sent Events from backend, mobile reads stream, per-tool status updates ("Searching gyms…", "Saving your trip…") instead of the cheap rotating copy. The proper version of what Day 9 step 6 stubbed in.
+2. **Match route DB-first flip** — PostGIS `ST_DWithin` against existing lat/lng, verified gyms ranked first, Google as fallback for thin areas. Unblocks the weekend verification work meaning anything at runtime.
+3. **Floating AI FAB across Trips/Profile screens** — modal-overlay pattern, makes the chat reachable from non-Home tabs.
+
+### Founder weekend work (no Claude session)
+- Backfill `citySlug` on 290 existing gyms (london-gb / newyork-us / miami-us; Nottingham → null or delete)
+- Manual verification of ~300 gyms across 3 cities: dayPass, dayPassPence, dayPassUrl, equipmentTags, verified=true
+
+### Sessions after that
+4. Concierge session 4 — `addGymToTrip` tool, full trip-edit surface
+5. Concierge session 5 — trust patterns, edge cases, error states in the chat
+6. Fake door for concierge auto-book — measure intent rate, no money, no legal
+7. Pre-TestFlight cleanup — remove `[Gate]` log, delete orphan onboarding files, error states, ToS/Privacy, App Store metadata, single API_BASE env var
+8. TestFlight setup — Apple Developer Program, signing, first build, closed beta 20-50 users in 3 cities
+
+## Day 10 — June 3, 2026 (Match route DB-first flip — unblocks weekend verification)
+
+Single-focus session. Streaming was briefly attempted then abandoned mid-stream when scope clarity (TestFlight > polish) re-prioritised. Pivoted to the match route flip, which is the higher-leverage prerequisite to the weekend gym-verification work.
+
+### Shipped — searchGymsImpl rewritten for radius + neighborhood + fallback
+
+- New `src/config/neighborhoodCentroids.ts` — 15 neighborhoods (Soho/Shoreditch/Mayfair/Kensington/Canary Wharf for London; Midtown/Soho/Brooklyn/Williamsburg/Upper East Side for NYC; Brickell/Wynwood/South Beach/Miami Beach/Midtown Miami for Miami). Forgiving lookup: lowercase, strip punctuation, exact + substring match, city-slug-scoped.
+- `searchGymsImpl` no longer uses `prisma.gym.findMany`. New shape:
+  1. Determine search center: neighborhood centroid (if AI provided one and we know it) else city centroid.
+  2. Raw SQL with PostGIS `ST_DWithin` filter, 5km radius from center, `city_slug` match, optional budget guard (`day_pass_pence IS NULL OR ≤ budget`).
+  3. Order: verified DESC, day_pass DESC, rating_count DESC NULLS LAST (moat first → day-pass-available next → popular).
+  4. Limit 10.
+- If DB returns zero results: fall back to `placesService.fetchNearbyGyms(center.lat, center.lng, 5000)`, tag each as `verified: false`, return as `source: 'google-fallback'`. AI's system prompt teaches it to caveat unverified results ("call ahead about day passes").
+- Tool description updated to teach AI about `source: verified-db | google-fallback | empty` and how to phrase each.
+
+### Shipped — UUID filter for chat persistence
+
+- Google fallback returns Google Place IDs (not UUIDs). Without filtering, the agent loop's `chatMessage.create` crashed on `gymIds` (UUID-typed column) and `hydrateGyms` choked on the same IDs.
+- Fix: regex filter on `parsed.gymIds` before persisting + before hydrating. `persistableGymIds = parsed.gymIds.filter(id => UUID_RE.test(id))`. Google gyms still get mentioned by the AI in prose; just don't get persisted as gym cards.
+- Architectural reason this is the right call (not "make hydrateGyms forgiving"): keeps the DB as the verified moat. Google fallback gyms don't have day-pass URLs / verified equipment tags / a known price, so they shouldn't render as proper cards. Tappable cards = verified gyms only.
+
+### Verified end-to-end
+
+Three curl-based tests, all green:
+
+1. **Empty-DB Miami (Brickell)** → `source: google-fallback`, AI returned 10 real Google gyms with explicit "call ahead" caveat. `PERSISTED gymIds: null` (correctly filtered out).
+2. **Empty-DB London (Canary Wharf)** → `source: google-fallback`, neighborhood centroid resolved, AI returned 10 Canary Wharf gyms with caveat.
+3. **One verified Miami gym (Equinox Brickell flipped manually)** → `source: verified-db`, AI surfaced "Equinox Brickell on 1441 Brickell Ave... day passes available at £40 a pop." UUID persisted to `gymIds`, full payload returned to mobile (address, dayPassPence, dayPassUrl, equipmentTags, photoUrls). Reverted after test.
+
+### Architectural decisions logged
+
+- **DB is the verified moat, Google is the fallback for unverified gaps.** Google results never get persisted to the gyms table — keeps provenance clean (every row in `gyms` with `verified: false` was put there by a real audit, not auto-pulled from a user query).
+- **Day-pass is a soft preference, not a hard filter.** Verified-but-day-pass-unknown gyms still surface (ranked lower) so the AI can mention them.
+- **Equipment filtering deferred to the match engine downstream**, not at the searchGyms tool layer. One source of truth for activity→equipment mapping.
+- **Currency: store everything in pence-equivalent integers, decide currency in display logic by city.** Miami $40 = `dayPassPence: 4000`. Mobile/prompt decides whether to render as £40 / $40 / €40 based on currency.
+
+### Lessons logged
+
+- **Streaming is polish, not a TestFlight blocker.** Spent ~30 minutes scoping SSE + ReadableStream + WebSocket trade-offs before catching that "I want to get to TestFlight soon" doesn't match "let me build SSE infrastructure." The path to TestFlight is: data quality (this session) → manual verification (weekend) → cleanup → Apple Dev signup → first signed build. Streaming is none of those.
+- **The first verified-path test failed with a fake explanation.** I assumed Claude was re-using cached results from conversation history when really the test was broken (placeholder UUID exported as literal again). Pattern: when the AI does something unexpected, audit `toolResults` BEFORE theorising about prompt behavior. Tool calls don't lie.
+- **zsh history expansion eats `!` in node -e commands.** Twice this session. Either pre-set `set +H` for the session, or rewrite logical-not checks as equality (`if (m === undefined)`). Single-quoting doesn't help — zsh expands history before quote processing.
+- **The PASTE_X placeholder anti-pattern from yesterday returned with a vengeance today.** Lost ~15 minutes to it across three iterations. Going forward, every command Claude provides ships with real values prefilled from the most recent output, no placeholder substitution required.
+
+### Pre-existing issues still open (carried)
+
+- Prisma drift on Supabase extensions
+- `tsconfig.json` `moduleResolution: bundler` blocks `tsc --noEmit` as CI check
+- Prisma 5.22 → 7 upgrade available (do NOT do mid-build)
+- `[Gate]` console.log in `app/_layout.tsx` (Phase 5)
+- Orphan onboarding files `lifestyle/budget/training/facilities` (Phase 5)
+- `API_BASE` hardcoded in 5+ mobile files (Phase 5)
+- `react-native-sse` installed on mobile but unused (left from abandoned streaming start). Either ship streaming in session 3 of concierge work, or `npm uninstall react-native-sse` in Phase 5 cleanup.
+
+### Files touched
+
+- `packages/api/src/config/neighborhoodCentroids.ts` — NEW (15 neighborhoods, `findNeighborhood` lookup)
+- `packages/api/src/routes/concierge.ts` — `searchGymsImpl` body rewritten (PostGIS radius + neighborhood + Google fallback), tool description updated, UUID filter (`persistableGymIds`) added at chatMessage.create + hydrateGyms call sites
+- `fitroam-mobile/package.json` + lockfile — `react-native-sse` installed (unused after streaming pivot, see open issues)
+
+---
+
+## What's next (priority order)
+
+### Founder weekend work (no Claude session — UNBLOCKED BY TODAY)
+- Backfill `citySlug` on existing gyms (london-gb / newyork-us / miami-us; Nottingham → null or delete)
+- Manual verification of ~300 gyms across 3 cities. For each: `verified=true`, `verifiedAt=now()`, `dayPass=true/false`, `dayPassPence` (USD ×100 for US, GBP ×100 for UK, single integer column), `dayPassUrl` (deep link to gym's day-pass purchase page), `equipmentTags` array. Now every verified gym surfaces in the AI with a real CTA instead of falling through to Google.
+
+### Next session — pick one
+1. **Floating AI FAB across Trips/Profile screens** — small mobile-only session, makes chat reachable from non-Home tabs.
+2. **Pre-TestFlight cleanup + Apple Dev Program signup** — boring but Apple approval takes a few business days, START NOW. Cleanup: remove `[Gate]` log, delete orphan onboarding files, single `API_BASE` env var, ToS/Privacy drafts, App Store metadata.
+3. **Concierge session 3 — proper streaming** — defer until after TestFlight, BUT `react-native-sse` is already installed if we choose to circle back.
+
+### Sessions after that
+4. Concierge session 4 — `addGymToTrip` tool, full trip-edit surface
+5. Concierge session 5 — trust patterns, edge cases, error states in chat
+6. Fake door for concierge auto-book — measure intent rate, no money, no legal
+7. TestFlight setup — first signed build, closed beta 20-50 users in 3 cities
+
+## Day 10 — June 3, 2026 (Match route DB-first flip — unblocks weekend verification)
+
+Single-focus session. Streaming was briefly attempted then abandoned mid-stream when scope clarity (TestFlight > polish) re-prioritised. Pivoted to the match route flip, which is the higher-leverage prerequisite to the weekend gym-verification work.
+
+### Shipped — searchGymsImpl rewritten for radius + neighborhood + fallback
+
+- New `src/config/neighborhoodCentroids.ts` — 15 neighborhoods (Soho/Shoreditch/Mayfair/Kensington/Canary Wharf for London; Midtown/Soho/Brooklyn/Williamsburg/Upper East Side for NYC; Brickell/Wynwood/South Beach/Miami Beach/Midtown Miami for Miami). Forgiving lookup: lowercase, strip punctuation, exact + substring match, city-slug-scoped.
+- `searchGymsImpl` no longer uses `prisma.gym.findMany`. New shape:
+  1. Determine search center: neighborhood centroid (if AI provided one and we know it) else city centroid.
+  2. Raw SQL with PostGIS `ST_DWithin` filter, 5km radius from center, `city_slug` match, optional budget guard (`day_pass_pence IS NULL OR <= budget`).
+  3. Order: verified DESC, day_pass DESC, rating_count DESC NULLS LAST (moat first -> day-pass-available next -> popular).
+  4. Limit 10.
+- If DB returns zero results: fall back to `placesService.fetchNearbyGyms(center.lat, center.lng, 5000)`, tag each as `verified: false`, return as `source: 'google-fallback'`. AI system prompt teaches it to caveat unverified results ("call ahead about day passes").
+- Tool description updated to teach AI about `source: verified-db | google-fallback | empty` and how to phrase each.
+
+### Shipped — UUID filter for chat persistence
+
+- Google fallback returns Google Place IDs (not UUIDs). Without filtering, `chatMessage.create` crashed on `gymIds` (UUID-typed column) and `hydrateGyms` choked on the same IDs.
+- Fix: regex filter on `parsed.gymIds` before persisting + before hydrating. Google gyms still get mentioned by the AI in prose; just don't get persisted as gym cards.
+- Architectural reason: keeps the DB as the verified moat. Google fallback gyms don't have day-pass URLs / verified equipment tags / a known price, so they shouldn't render as proper cards. Tappable cards = verified gyms only.
+
+### Verified end-to-end
+
+Three curl-based tests, all green:
+1. **Empty-DB Miami (Brickell)** -> `source: google-fallback`, AI returned 10 real Google gyms with explicit "call ahead" caveat. `PERSISTED gymIds: null` (correctly filtered out).
+2. **Empty-DB London (Canary Wharf)** -> `source: google-fallback`, neighborhood centroid resolved, AI returned 10 Canary Wharf gyms with caveat.
+3. **One verified Miami gym (Equinox Brickell flipped manually)** -> `source: verified-db`, AI surfaced "Equinox Brickell on 1441 Brickell Ave... day passes available at £40 a pop." UUID persisted to `gymIds`, full payload returned to mobile (address, dayPassPence, dayPassUrl, equipmentTags, photoUrls). Reverted after test.
+
+### Architectural decisions logged
+
+- **DB is the verified moat, Google is the fallback for unverified gaps.** Google results never get persisted to the gyms table.
+- **Day-pass is a soft preference, not a hard filter.** Verified-but-day-pass-unknown gyms still surface (ranked lower).
+- **Equipment filtering deferred to the match engine downstream**, not at the searchGyms tool layer.
+- **Currency: store everything in pence-equivalent integers, decide currency in display logic by city.**
+
+### Lessons logged
+
+- **Streaming is polish, not a TestFlight blocker.** "I want to get to TestFlight soon" doesn't match "let me build SSE infrastructure."
+- **The first verified-path test failed with a fake explanation.** When the AI does something unexpected, audit `toolResults` BEFORE theorising about prompt behavior. Tool calls don't lie.
+- **zsh history expansion eats `!` in node -e commands.** Either pre-set `set +H` or rewrite logical-not checks as equality.
+- **PASTE_X placeholder anti-pattern wasted ~15 minutes across three iterations.** Going forward, every command Claude provides ships with real values prefilled.
+- **iOS-only blind spot caught at session end.** Stack is Expo + React Native = cross-platform from day one. Cutting ~45% of UK and 40% of US users out of closed beta is not free. Launch milestone updated to dual-platform.
+- **TestFlight does NOT require Apple App Review for internal testers** (up to 100). Earlier "1-3 days Apple approval" estimate applied to external testing only. For 20-50 internal testers added via Apple IDs, only Apple wait is the Developer Program signup itself (~1 business day).
+
+### Pre-existing issues still open (carried)
+
+- Prisma drift on Supabase extensions
+- `tsconfig.json` `moduleResolution: bundler` blocks `tsc --noEmit` as CI check
+- Prisma 5.22 -> 7 upgrade available (do NOT do mid-build)
+- `[Gate]` console.log in `app/_layout.tsx` (Phase 5)
+- Orphan onboarding files `lifestyle/budget/training/facilities` (Phase 5)
+- `API_BASE` hardcoded in 5+ mobile files (Phase 5)
+- `react-native-sse` installed on mobile but unused (left from abandoned streaming start)
+
+### Files touched
+
+- `packages/api/src/config/neighborhoodCentroids.ts` — NEW (15 neighborhoods, `findNeighborhood` lookup)
+- `packages/api/src/routes/concierge.ts` — `searchGymsImpl` body rewritten, tool description updated, UUID filter added at chatMessage.create + hydrateGyms call sites
+- `fitroam-mobile/package.json` + lockfile — `react-native-sse` installed (unused after streaming pivot)
+
+---
+
+## Launch milestone updated — DUAL-PLATFORM CLOSED BETA
+
+Previous backlog said "TestFlight closed beta with 20-50 users in 3 cities." That was iOS-only. Corrected:
+
+**Closed beta = TestFlight (iOS) + Google Play Internal Testing (Android), simultaneously, 20-50 users in 3 cities.**
+
+Stack is Expo + React Native, every screen built so far works on both platforms. Android marginal cost: half-session of platform polish (back button gesture, status bar, Material defaults) + $25 one-time Google Play Console signup + `eas build --platform android`. Internal testing on Play distributes faster than TestFlight (no Apple review even for first build).
+
+### Apple TestFlight rules (corrected from prior backlog)
+
+- **Internal testing** (<=100 testers added via their Apple IDs): NO App Review required, builds usable minutes after upload.
+- **External testing** (public links, <=10,000 testers): first build of each version requires App Review (faster than App Store but still 24-48h).
+- Closed beta with 20-50 friends = internal testing = no Apple review gate.
+- Only Apple wait: Apple Developer Program signup ($99/yr, ~1 business day to approve).
+
+### Google Play Internal Testing
+
+- $25 one-time Google Play Console signup.
+- Internal testing track: up to 100 testers, no review, builds live in hours.
+- Same Expo codebase, `eas build --platform android` outputs AAB.
+
+---
+
+## What's next (priority order)
+
+### Founder weekend work (no Claude session — UNBLOCKED BY TODAY)
+- Backfill `citySlug` on existing gyms (london-gb / newyork-us / miami-us; Nottingham -> null or delete)
+- Manual verification of ~300 gyms across 3 cities. For each: `verified=true`, `verifiedAt=now()`, `dayPass=true/false`, `dayPassPence` (USD x100 for US, GBP x100 for UK, single integer column), `dayPassUrl` (deep link to gym's day-pass purchase page), `equipmentTags` array.
+
+### Founder admin (parallel, no Claude session)
+- Apple Developer Program signup ($99/year, https://developer.apple.com/programs/enroll/). ~1 business day to approve. **Start NOW.**
+- Google Play Console signup ($25 one-time, https://play.google.com/console/signup). Start NOW.
+
+### Next session — concierge 4 + fake-door auto-book bundle
+- **`addGymToTrip` + `removeGymFromTrip` backend tools.** Impl functions, agent loop dispatch cases, system prompt rules. Schema already has `TripGym` join table.
+- **Mobile Trips tab renders gyms attached to each trip.** Reuse existing `ChatGymCard` component, flat list under each trip, no redesign.
+- **Fake-door auto-book.** New `BookingInterest` table (userId, tripId, gymId, email, price-shown, createdAt, status='waitlisted'). `POST /api/booking-interest`. New AI tool `recordBookingInterest` so AI can offer "want me to sort it for you?" mid-chat. "Sort it for me" button on verified gym cards (secondary styling, smaller than the day-pass CTA). Modal shows price (e.g. "£2.99/month extra" or "£2 booking fee" — pricing decision deferred to start of session) + email capture + "we'll be in touch" CTA. Records to `BookingInterest`. NO actual booking, NO payment, ZERO legal surface — pure intent measurement.
+
+### Session after — pre-launch cleanup + first builds
+- Remove `[Gate]` console.log in `app/_layout.tsx`
+- Delete orphan onboarding files (`lifestyle.tsx`, `budget.tsx`, `training.tsx`, `facilities.tsx`)
+- Single `API_BASE` env var (currently hardcoded in 5+ files)
+- ToS + Privacy Policy drafts (template + light edits, not lawyer-grade — closed beta with informed users)
+- App Store listing metadata (screenshots, description, category, age rating)
+- Google Play listing metadata (same set)
+- Android platform polish pass (back button, status bar, Material defaults)
+- First `eas build --platform ios` -> App Store Connect -> internal testers can install
+- First `eas build --platform android` -> Play Console internal track -> internal testers can install
+
+### Realistic timeline to closed beta in testers' hands
+
+- **Today + tomorrow:** Apple Dev signup, Play Console signup (founder admin, no code)
+- **This weekend:** ~300 gym verification (founder admin, no code)
+- **Next coding session (~1 day this week):** Concierge 4 — addGymToTrip + Trips renders gyms + fake-door auto-book
+- **Following coding session (~1 day next week):** Pre-launch cleanup + Android polish + first iOS build + first Android build
+- **Distribution:** Apple internal TestFlight = minutes after build upload. Google Play internal = hours.
+
+**Target: 7-10 days to closed beta in testers' hands, dual-platform.**
+
+### Deferred to post-beta (not blocking launch)
+- Concierge session 3 — streaming (`react-native-sse` already installed if we circle back). Polish, not blocker.
+- Concierge session 5 — trust patterns, edge cases. Wait until 20-50 testers reveal what those weirdnesses actually are.
+- External TestFlight + Play Store public listing (if traction signal warrants moving beyond closed beta).
+
+## Day 11 — June 4, 2026 (Closed beta build-out: fake-door booking, two-button card, AI signal, real-device testing)
+
+Long session. Three things really happened: (a) shipped the full closed-beta UX for the booking interest fake door including the modal, the two-button gym card, real-time email alerts, and an admin web page to triage interest; (b) caught and fixed an architectural bug where the AI couldn't actually deliver "wider Google search" when verified pool was thin; (c) cleaned up all pre-existing tsc errors across mobile so we now compile clean for the first time in project history.
+
+### Shipped — backend (1 commit on dev)
+
+- **Option C — searchGyms auto-merge.** Old behavior: returned `verified-db` only when DB had hits, `google-fallback` only when DB was empty. AI couldn't override. New behavior: if DB returns `<3` verified gyms, ALWAYS also fetch from Google, dedupe by name, return as merged list. New source values: `verified` / `mixed` / `google-fallback` / `empty`. AI never needs to ask permission for a "wider search" — it's the default.
+- **`recordUserIntent` tool.** Fires when AI gets out-of-scope city (Berlin, Paris) or unimplemented feature request. Emails Sam via `sendUserIntentAlert` (Resend), no user-facing artifact. Categories: `out_of_scope_city`, `unimplemented_feature`, `other_signal`. Captures demand signal without diluting the 3-city moat. Decision logged: better signal than relaxing the city constraint outright.
+- **System prompt updated** for both above: never ask permission for a wider search; always fire `recordUserIntent` before declining a city or capability.
+- **Admin web `/admin`** — full dark-theme UI, admin-only via hardcoded UUID, status filters (waitlisted / contacted / fulfilled / declined), per-row gym/trip/user context, click-to-call phone numbers, copy-to-clipboard buttons. Auto-load on saved UID disabled (was causing Prisma pool contention during phone testing).
+- **Connection pool**: bumped `connection_limit=20` in `DATABASE_URL` query param. Earlier setImmediate refactor reduced background DB calls; this raises ceiling for parallel reads (admin + chat at once).
+
+### Shipped — mobile (1 commit on main)
+
+- **`ChatGymCard` extracted** to its own component (~244 lines), reused across chat thread + trip detail. Two-button layout: green "Let us handle everything for you" + sub "£2.99 · early access", grey "Get pass myself". Friction caption under green button: `(fill forms · ID upload · payment · sign-ups · reception desk)` — anchors the abstract "everything" in concrete pains.
+- **Buttons fully rounded** (`borderRadius: 100`), full borderWidth on grey button so it reads tappable. "Tap card for details ›" affordance hint above the button row.
+- **Card body tappable** → pushes to `/gym/[id]` for full detail (photos, hours, reviews, get-access flow). Inner buttons keep their own onPress, taps don't bubble.
+- **`BookingInterestModal`** — slide-up sheet, "Got it, [name]." headline, body copy about concierge launching soon, primary CTA "Open day pass page →" that opens the gym's day-pass URL via Linking. Phased state machine (submitting / success / error). Resets on dismiss so re-open does a fresh POST.
+- **Trip Detail rich gym rendering.** Replaced minimal `<Ionicons /> + name` rows with full `ChatGymCard saved tripId source="trip_detail"` cards. Trip-level gyms (legId=null) now render in a `SAVED GYMS` section above ITINERARY (they were previously invisible). `TripGym` type widened to carry full gym data.
+- **Centralized `API_BASE`** in `src/lib/api.ts`. 14 files migrated from hardcoded `http://192.168.0.64:3000`. Two more hardcoded URLs in `gym/[id].tsx` migrated as part of bug fix.
+- **`recordBookingInterest` helper** in `src/lib/bookingInterest.ts`. Single POST helper used by the modal.
+- **Voice hint pill**: tap mic → focuses input AND shows dismissible "Voice coming soon — type instead for now ✨" pill above input. Solves the "phone is broken" UX gap when users tap mic and get no feedback.
+- **"Plan this leg" prefill**: Trip Detail's plan-leg button pushes to home with city/leg/trip params. Home reads them, builds prefill ("Plan leg 1 of \"Miami trip\" — I'm in Miami. What gyms should I hit?"), focuses input. `consumedPlanningRef` guards against re-firing if user clears input.
+
+### Bugs fixed mid-session
+
+- **`useProfile` typed `citySlug` missing.** Backend wrote it (Day 6) but mobile type was stale. Added field + default.
+- **`passport.tsx` Visit type duplication.** Local interface had `status?: string` (optional) while `useStats` exported `status: string` (required). Deleted local, imported from useStats. Dead `days?` field disappeared as side-effect.
+- **`gym/[id].tsx` hook order violation.** `useUser` called below the `useEffect` that referenced `user` (TS error: "used before declaration"). Hoisted `useTheme/useRouter/useUser` to top of component. React-canonical pattern restored.
+- **24-hour gym hours bug.** `formatHours` looped days 0-6 matching periods by `open.day === i`. Google's convention for 24/7 venues is ONE period with `open: {day: 0, hour: 0}` and no close — so all days except Sunday read "Closed." Now detects single-period and per-day 24h indicators and renders "Open 24 hours." Hit on PureGym Piccadilly during live testing.
+- **`profile.tsx` malformed import** (caused by the centralize-API_BASE migration script naively inserting into a multi-line import block). Fixed by moving the API_BASE import out of the labels import block.
+- **`BookingInterestModal` style ref**: `styles.subline` didn't exist (left over from refactor). Replaced with inline style.
+
+**Zero tsc errors mobile-wide** for the first time in project history. Apart from the known pre-existing `tsconfig.json` `moduleResolution: bundler` config issue (BACKLOG since Day 6), the codebase compiles fully clean. Worth investigating that config flag next session now that tsc actually runs.
+
+### Real-device test results
+
+- Verified gym card renders correctly (photo, name, address, £35 day pass, equipment tags, both buttons). Conversational AI tone reads well.
+- Two-button layout works as designed in chat AND trip detail. Card-tap pushes to gym detail.
+- AI took initiative: saved trip on "I'm going to Miami June 22-25" without permission ask. Updated dates in place when user said "actually June 22-25." Did NOT call deleteTrip on a date change (Day 9 guardrails holding).
+- AI handled out-of-scope cities ("Berlin?") with honest "I don't cover that yet" + offer to help with covered cities.
+- AI surfaced Google-fallback gyms (PureGym Piccadilly, Nuffield, Fitness First) when London upper-body query had no verified results. Caveat language landed correctly: "I haven't verified day passes at these spots myself — worth calling ahead."
+- AI Google fallback bug observed mid-session — user said "Nah I want other options," AI promised a "wider Google search" but called `searchGyms` with same params and returned same result. Root cause: Option C wasn't shipped yet at that point. Re-test after Option C deployment in next session.
+- Chat broke 2x in a row on a busy back-and-forth. Dev log showed admin tab background-polling at the same moment. Root cause: admin auto-load + Prisma pool starvation. Both mitigations now in place (auto-load removed, pool bumped to 20). Worth re-test.
+
+### Decisions locked
+
+- **No deception in product design.** Sam proposed "currently in maintenance" framing for the fake-door; refused on user-deception grounds. Honest "concierge launching soon · early access" framing is the standard. Mid-session pivot reinforced: ripped `recordBookingInterest` from AI tool set entirely so the green mobile button is the SOLE booking-capture surface. AI's job is to redirect to the button + include the day-pass URL as immediate-action backup.
+- **3-city constraint stays hard.** Berlin / Paris / Tokyo requests → AI declines plainly AND `recordUserIntent` fires email. Better signal than leniency. Revisit AFTER beta email volume tells us actual demand.
+- **One verified gym per card per response is enough for now.** AI's prose can name additional gyms inline as text. Lead with 1 hero card, offer to show more on request, is the right pattern. System prompt tuning for next session.
+- **Day pass naming**: keep "day pass" everywhere the product is literally that (gym card price, modal "Open day pass page"). Grey button became "Get pass myself" — slight psyche-expansion without committing to multi-day products that don't exist yet.
+
+### Lessons logged
+
+- **`setImmediate` is the right fire-and-forget primitive in Express + tsx-watch.** The `void (async () => {})()` IIFE pattern hangs the dev server. Confirmed via progressive isolation.
+- **Never background `npm run dev` with `&` in a shared terminal.** Accumulates zombie tsx-watch processes (11 found this session) that exhaust Supabase's connection pool. Use dedicated terminal tab.
+- **Move all Prisma fetches inline BEFORE `res.json()`**; pass captured values into `setImmediate` with zero DB calls in the background task.
+- **Admin tab in browser hammers backend.** Even one tab open during phone testing creates Prisma pool contention with the chat agent loop. Auto-load disabled, connection_limit bumped to 20. Real prod-level pool sizing investigation deferred to v1.1.
+- **Audit `toolResults`, not Claude's prose**, when diagnosing weird AI behavior. Day 9 lesson reinforced — AI said "I'll do a wider search" but actually re-called searchGyms with same params; only the persisted tool results showed this.
+- **Never embed non-ASCII characters (em-dashes, curly quotes) in heredoc / `node -e` string literals.** Shell normalizes them in unpredictable ways, breaking byte-for-byte string matching. Stick to ASCII inside patches.
+- **Apostrophes inside single-quoted JS strings break the file.** Cost ~15 min mid-session. Going forward: rewrite phrasing to avoid them, or use double-quotes / backticks instead.
+- **Patch scripts to /tmp first, run as separate node call.** Heredoc-into-node-e chains are zsh-quoting nightmares. Writing the script to `/tmp/<name>.js` with `<<'EOF'` (single-quoted EOF) sidesteps all interpolation. Adopted as default this session.
+- **`tsx watch` is genuinely unreliable.** Stale code phantoms, force-kill failures, terminal lockups. Workflow: close terminal tab to kill, never trust Ctrl+C alone. Restart on every nontrivial backend file edit.
+
+### Files touched
+
+**Backend:**
+- `src/routes/concierge.ts` — Option C merge, recordUserIntent tool + impl + dispatch, system prompt updates, tool description updates
+- `src/lib/alerts.ts` — sendUserIntentAlert function + interface
+- `public/admin.html` — auto-load removed
+- `.env` — connection_limit=20 added (not committed)
+
+**Mobile (4 new + 17 modified):**
+- NEW `src/lib/api.ts` — centralized API_BASE
+- NEW `src/lib/bookingInterest.ts` — POST helper
+- NEW `src/components/BookingInterestModal.tsx`
+- NEW `src/components/ChatGymCard.tsx`
+- `app/(tabs)/home.tsx` — extracted ChatGymCard, voice hint, leg prefill, ~78 lines deleted
+- `app/(tabs)/profile.tsx`, `(tabs)/trips.tsx`, `trips/new.tsx`, `trips/[id].tsx`, `gym/[id].tsx`, `profile/passport.tsx` — API_BASE migration + bug fixes
+- `src/components/TripCard.tsx` — TripGym type widened
+- `src/components/PlacePicker.tsx`, `src/context/UserProvider.tsx`, `src/hooks/{useChat,useNextTrip,usePendingVisits,useProfile,useStats,useTopMatch,useWeather}.ts(x)` — API_BASE migration
+- `src/hooks/useProfile.tsx` — citySlug field added
+
+### Pre-existing issues still open (carried)
+
+- Prisma drift on Supabase extensions
+- `tsconfig.json` `moduleResolution: bundler` blocks tsc as CI check — now that tsc actually runs clean, investigate this fix
+- Prisma 5.22 → 7 upgrade available (do NOT do mid-build)
+- `[Gate]` console.log in `app/_layout.tsx` (Phase 5)
+- Orphan onboarding files `lifestyle/budget/training/facilities` (Phase 5)
+- `react-native-sse` installed but unused (left from abandoned streaming start, Day 10)
+- ADMIN_USER_IDS hardcoded in concierge — move to env var (v1.1)
+
+---
+
+## What's next (priority order)
+
+### Next session — pick one
+1. **Manual gym verification weekend setup.** Now that the verified path is fully wired (search → AI prose → cards → green button → fake-door modal → email alert), every gym Sam verifies makes the AI more useful. ~300 gyms across London/NYC/Miami: `verified=true`, `verifiedAt=now()`, `dayPass=bool`, `dayPassPence`, `dayPassUrl`, `equipmentTags[]`. Founder weekend work, no Claude session needed.
+2. **Apple Developer Program signup ($99/year) + Google Play Console ($25 one-time).** Boring but blocking. Internal TestFlight needs no Apple App Review (~1 business day for the Apple Dev signup itself). Founder admin, no Claude session.
+3. **Pre-TestFlight cleanup.** Remove `[Gate]` log, delete orphan onboarding files, ToS + Privacy drafts, App Store/Play metadata, investigate `moduleResolution: bundler`. ~half-session.
+4. **Chat thread delete + sticky-list cleanup** — small UX gap noted during testing. v1.1 territory but cheap. ~half-session.
+
+### Deferred to v1.1 (logged tonight)
+- Chat thread delete (user has stale test threads)
+- Berlin / out-of-scope city policy revisit after seeing email signal volume
+- Voice input wiring (@react-native-voice/voice + Whisper)
+- AI multi-gym response: hero + "show me more" pattern (system prompt tuning)
+- Streaming responses (proper SSE; `react-native-sse` already installed)
+- ADMIN_USER_IDS → env var
+- Prisma pool sizing under real load (mitigated tonight, not architecturally fixed)
+
+### Deferred to v1.2+
+- Pilates / yoga support (different match logic)
+- 4th launch city (post-PMF signal)
+- Strava / Whoop integrations
+- User-generated content (gym reviews)
+
+### Realistic timeline to dual-platform closed beta in testers' hands
+
+- This weekend: ~300 gym verification (founder admin) + Apple Dev / Play Console signups
+- Next coding session: pre-TestFlight cleanup pass
+- Following session: first `eas build --platform ios` + `eas build --platform android` → internal testing on both platforms
+- Distribution: TestFlight internal = minutes after upload; Play internal = hours
+
+**Target: 7-10 days to closed beta, dual-platform. Closer than ever.**
+
+---
+
+## Day 11 — Addendum (June 4 evening session, ~hour 7-11)
+
+Long evening of iteration after the original Day 11 commits. Session went deeper into closed-beta UX, expanded AI capabilities, surfaced and fixed two real bugs, and started a light-mode accessibility sweep. Real-device testing drove every decision.
+
+### Shipped — backend (3 commits)
+
+- **Option C verification (real-device test):** Earlier in the session the AI promised a "wider Google search" but kept returning the same verified result. Caught and fixed via the auto-merge introduced earlier; later AI runs correctly surfaced merged verified + Google results.
+
+- **Restored missing recordUserIntent tool + impl + dispatch.** Critical bug: during the line-74 syntax-fix rewrite earlier in Day 11, the tool definition and impl got silently dropped. System prompt was instructing the AI to call a tool that no longer existed. **Email signal had been non-functional for hours.** Now restored. Lesson: when rewriting a multi-line broken string, audit the surrounding tool definitions — the broken string may have swallowed multiple tools into one malformed line that line-replace nukes.
+
+- **`logVisit` tool added.** AI can now log passport stamps on the user's behalf when they say "I went to PureGym yesterday." Requires verified UUID (Google place_ids rejected). Visit logged with `status: 'confirmed'` since AI logging implies user-stated. AI must call `searchGyms` first to disambiguate when gym name is generic.
+
+- **`updateProfile` tool added.** AI can update one whitelisted field per call (primaryActivity / citySlug / priorities / maxDistanceMinutes / trainingPattern). System prompt mandates user confirmation before firing — wrong updates erode trust faster than missing capability.
+
+- **BookingInterest schema migration (direct SQL via Supabase):** `gym_id` nullable, added `gym_place_id` / `gym_name_snapshot` / `gym_address_snapshot` columns. Prisma client regenerated. Relation `gym Gym` → `gym Gym?` with `onDelete: SetNull`. Supports two acceptable shapes on POST `/api/booking-interest`:
+  - Verified path: `gymId` UUID → £2.99 price, `source: 'gym_card'`, 🟢 alert subject "New concierge waitlist tap"
+  - Unverified path: `gymPlaceId` + name + address snapshot → £0, `source: 'verification_request'`, ⭐ alert subject "Verification request" with different action prompt
+- `sendBookingInterestAlert` branches on `isVerified` for subject + body + action.
+
+- **`websiteUrl` exposed in `searchGyms` response** — both verified-DB and Google-fallback gyms now carry the gym homepage URL. AI has access. (Tool-description encouragement REVERTED mid-session after device test showed AI dropping to prose-mode markdown lists instead of structured cards. Field is exposed for v1.x usage; system-prompt activation is a future session decision.)
+
+### Shipped — mobile (2 commits)
+
+- **Unverified gym verification-request UI.** Green button now shows on all gyms (signed-in user). Copy and styling branch on `verified`:
+  - Verified: filled green "Let us handle everything for you" + "£2.99 · early access"
+  - Unverified: outline-style green "Notify me when we cover this gym" + "early access" (transparent bg + 1.5px accent border)
+- **Tap-card-for-details hint louder on unverified.** Accent color, fontSize 13, bold — primary action visual weight. Verified gyms keep the original subtle grey hint (their primary action is the green concierge button).
+- **`bookingInterest.ts` helper widened to discriminated union** (`kind: 'verified'` | `kind: 'unverified'`). Body assembly branches on kind.
+- **`BookingInterestModal` updated:** gym prop carries `verified` flag. POST and success copy both branch. Unverified copy: "isn't in our verified network yet — we haven't checked their day-pass setup ourselves. We've logged your interest so we can prioritise verifying gyms like this one next."
+
+- **Light-mode accent contrast fix (WCAG AA).** Previously `#c8ff57` was used as text color across 12 surfaces — fails contrast on white backgrounds at ~1.5:1 (needs 4.5:1). New `accentReadable` token: `#c8ff57` in dark mode (unchanged), `#5a8f1a` in light mode (4.6:1 against white). Swept 12 files: text/icon/spinner usages migrated. Background fills and `accentText` (dark text on green fill) left alone.
+
+- **Get Access modal £0 bug fix.** Unverified gyms have null `dayPassPence`. UI was rendering "1 day pass — £0" via `?? 0` fallback. Now drops the price suffix entirely when unknown, adds "Price not published — check with the gym before going." to the subline. Comparison boxes show "—" instead of "£0."
+
+- **Leg prefill regression fix.** `planLeg` was routing to `/(tabs)` (the tab group, not a specific tab). Sometimes routed to whichever tab was last active. Now routes to `/(tabs)/home` explicitly. Also dropped `router.setParams` clear (caused effect-re-fire on some expo-router versions); `consumedPlanningRef` is the sole guard. Bumped focus delay 100ms → 400ms for real-device tab-transition timing.
+
+### Decisions locked
+
+- **Lenient out-of-scope cities** (Berlin, Paris, Tokyo): held strict line. AI declines + fires `recordUserIntent` for the demand signal. Email volume after 2 weeks of beta tells us when to expand. Cleaner moat + cleaner signal than ambient leniency.
+- **Green button on unverified gyms (verification-request fake door):** ships. Different copy + visual weight + payload from concierge fake door. Captures demand signal for which gyms to verify next, with no broken promise of concierge service we can't deliver.
+- **AI silent-tool-call architecture:** `recordUserIntent` fires silently — no user-visible artifact. Logs to founder via email + lays foundation for analytics table in v1.x.
+
+### Lessons logged
+
+- **`tsx watch` actually rolls back changes silently.** Two patches earlier in the night looked like they applied (confirmation logs, grep showed results), but when tested on device behaved like the old code. Force-restart Tab 2 on every nontrivial backend edit. Day 8/9/10 lesson reinforced for the third+ time.
+- **Apostrophes inside single-quoted JS strings break the file silently when grep can't see syntax.** Cost ~20 min mid-session. The `recordUserIntent` rollback was found via diff against the commit, not via tsc (tsc had been passing because the broken line was a string literal, parser-recoverable). Going forward: any string with apostrophes goes inside double-quoted or backticked literals.
+- **Patch failures cascade.** The line-74 syntax-fix rewrite silently dropped `recordUserIntent`. The next patch I tried (route changes) anchored on an interface that didn't exist. The next one anchored on a tool dispatch that didn't exist. Each anchor failure cost diagnostic minutes. Discipline: when patches abort, audit git diff against last good commit BEFORE re-patching.
+- **Scope creep at hour 6+ is genuine product risk.** Each "small UX iteration" I shipped at hour 7-11 was real, none alone was harmful, but the cumulative cost was ~5 hours of fatigued patch-and-test cycles where I made the same mistake (apostrophes-in-strings) twice. Going forward: scope hard-locked at session start, additions require explicit re-scope check.
+- **Real-device test before declaring ship-ready.** Three things were "confirmed working" in this session that broke on real device: leg prefill (routed wrong tab), AI Google fallback (loop bug), `recordUserIntent` (silently missing tool). Curl tests aren't enough — device-test before celebrating.
+
+### Pre-existing issues still open (carried)
+
+- Prisma drift on Supabase extensions
+- `tsconfig.json` `moduleResolution: bundler` (now that tsc passes, investigate)
+- Prisma 5.22 → 7 upgrade available (defer)
+- `[Gate]` console.log in `app/_layout.tsx` (Phase 5)
+- Orphan onboarding files `lifestyle/budget/training/facilities` (Phase 5)
+- `react-native-sse` installed but unused (Day 10 carryover)
+- ADMIN_USER_IDS hardcoded — env var (v1.1)
+- Light-mode accent sweep complete BUT untested for completeness — there may be edge surfaces I missed; spot-check during weekend verification work
+
+### Open items deferred from tonight's scope (raised, not built)
+
+These were raised during real-device testing and explicitly deferred:
+
+- **Item 16 — AI URL knowledge gap (PARTIALLY shipped).** Backend now exposes `websiteUrl` via `searchGyms`, AI has the data. System prompt encouragement was reverted because AI dropped to prose-mode (markdown bullet lists of gym names instead of structured `gymIds`). Re-tackle in next session: instead of telling the AI to "mention websiteUrl in prose," teach it that the rendered gym card itself surfaces this — and the AI just needs to not claim ignorance.
+- **Item 17 — Length-of-stay collection.** AI captures intent length-of-stay before search to power product-direction analytics. Strategic decision deferred until 200+ trips exist. Existing `Trip.arriveOn / departOn` already gives average length on demand via SQL.
+- **Item 18 — Profile inbox for user feedback.** Beta phase relies on direct text/email feedback (20-50 close-contact testers). Add when scale demands. Typeform/Tally link in Profile is sufficient interim.
+- **Chat thread delete (v1.1).** User can't clean stale test threads from chat history sheet. Cheap fix, defer to first post-launch UX pass.
+- **Multi-gym hero pattern.** AI should lead with 1 hero card + "show me 2 more?" offer rather than dumping multiple cards inline. System-prompt tuning, not architectural.
+- **GET ACCESS button consistency on unverified gyms.** Image 2 in session showed inconsistency: AI claimed no URL, but gym detail page renders Get Access fine. Addressed at backend (websiteUrl exposed) but mobile gym-detail flow vs chat-card flow may have different routing logic worth auditing.
+
+### Files touched (full session)
+
+**Backend (4 files across 3 commits):**
+- `prisma/schema.prisma` — BookingInterest schema migrated
+- `src/lib/alerts.ts` — sendBookingInterestAlert branches on isVerified
+- `src/routes/bookingInterest.ts` — POST accepts both shapes
+- `src/routes/concierge.ts` — websiteUrl exposed; recordUserIntent + logVisit + updateProfile tools; system prompt capability list
+
+**Mobile (12 files across 2 commits):**
+- `src/theme/tokens.ts` — accentReadable token added
+- `src/lib/bookingInterest.ts` — union type
+- `src/components/ChatGymCard.tsx` — green button branches; hierarchy fixes
+- `src/components/BookingInterestModal.tsx` — gym prop widened; copy branches
+- `src/components/GetAccessForm.tsx` — accent text → accentReadable
+- `app/gym/[id].tsx` — £0 bug fix; accent sweep
+- `app/(tabs)/home.tsx` — leg prefill regression fix; accent sweep
+- `app/(tabs)/trips.tsx` — accent sweep
+- `app/trips/[id].tsx` — planLeg routes to /(tabs)/home explicitly; accent sweep
+- `app/welcome.tsx`, `app/onboarding/style.tsx` — accent sweep
+
+---
+
+## What's actually next (priority order)
+
+### This weekend — founder admin (no Claude session)
+1. Apple Developer Program signup ($99/year)
+2. Google Play Console signup ($25)
+3. **~300 gym verification across London / NYC / Miami.** Every verified gym makes the AI more useful and the green concierge button more meaningful.
+
+### Next coding session — Pre-TestFlight cleanup
+4. Remove `[Gate]` console.log, delete orphan onboarding files, investigate `moduleResolution: bundler`, single API_BASE env var, ToS/Privacy drafts, App Store + Play metadata
+5. First `eas build --platform ios` + `eas build --platform android`
+6. Internal TestFlight + Play Internal distribution
+
+### After that
+7. **Re-tackle item 16** (AI URL knowledge / gym data surfacing) — system prompt tuning that doesn't drop the AI to prose mode
+8. AI multi-gym hero pattern (system prompt)
+9. Chat thread delete UX
+10. Light-mode accessibility spot-check (during real beta use)
+
+### Deferred (post-PMF signal)
+- Length-of-stay analytics (build after 200+ trips)
+- Profile inbox (build after Typeform-style fallback is insufficient)
+- Berlin / out-of-scope city policy revisit
+- Voice input wiring
+- Streaming responses (SSE)
+- 4th launch city
+- Pilates / yoga support
+
+**Target: 7-10 days to dual-platform closed beta.**
+
+---
+
+## Day 12 — June 9, 2026 (Option C snapshot persistence + booking modal fix + chat history restore fix)
+
+Continuation of Day 11's open release-blocker. Closed beta blocker was: Google-fallback AI responses rendering as markdown asterisk walls instead of structured gym cards. Resolved tonight via Option C architecture. Two downstream bugs surfaced and were fixed in the same session.
+
+### Shipped — backend (1 commit, `aa25a8c`)
+
+**Option C: snapshot persistence for Google-fallback gyms**
+
+- Schema migration via Supabase SQL editor: `ALTER TABLE chat_messages ADD COLUMN google_place_ids TEXT[];`. Prisma schema synced: `googlePlaceIds String[] @default([]) @map("google_place_ids")`. `prisma generate` ran.
+- New helper `extractGoogleGymsFromTools(toolTurns)` reads the persisted `tool_results` JSONB column, finds the most recent `searchGyms` tool result, and returns a Map of `{placeId → ChatGym}` snapshots. Looks for matching `tool_use_id` to handle multiple searchGyms calls in one turn.
+- `respond` tool description updated: AI told to include both verified UUIDs AND Google place IDs in `gymIds[]`. The mobile UI renders both as cards.
+- POST `/threads/:id/messages`: splits parsed.gymIds via UUID regex into `verifiedUuids` (DB-hydrated via `prisma.gym.findMany`) and `googlePlaceIds` (snapshot-hydrated via `extractGoogleGymsFromTools`). Combines in original AI-ranked order before returning. Persists both columns.
+- GET `/threads/:id/messages`: rebuilds gym objects per message by combining verified DB hydration + per-message toolResults snapshot extraction.
+
+**bookingInterest POST response fix**
+
+- Response was dereferencing `gym.name` unconditionally even on the unverified path where `gym` is null (only populated for verified path). Threw "Cannot read properties of null (reading 'name')" — that exact error surfaced inside the BookingInterestModal's error phase.
+- Fix: response now branches on `isVerifiedPath` for `pricePence` and `gymName` fields. Unverified path uses the `gymName` input snapshot, pricePence=0.
+
+### Shipped — mobile (1 commit, `240eb6d`)
+
+**Chat history restore fix**
+
+- Bug: when restoring a cached thread on mount, the early-return after successful `loadThread` skipped populating the threads list. Chat history sheet showed stale or empty data; tapping a thread either did nothing or dumped user back to the landing screen.
+- Fix: after successful cache restore, still fetch + setThreads so the sheet reflects server state.
+- Removed temporary [DEBUG] console.log lines added during diagnosis (handlePickThread, loadThread tracking).
+
+### Verified end-to-end
+
+- New account ("Samuel"), new chat, "I'm in London central need lifting gym before 8pm 45 min" → AI returned Google-fallback gyms rendered as cards with outline-style "Notify me when we cover this gym" buttons. NOT as markdown asterisk wall.
+- Tapped Notify button on unverified gym → modal completed without error, success state shown, alert email landed.
+- Closed app fully, reopened → cached thread restored AND chat history sheet populates with all prior threads.
+- Tapped thread in sheet → sheet closes, conversation appears.
+
+### Lessons logged (today's specific failures)
+
+- **`extractGoogleGymsFromTools` declaration silently lost mid-session.** Initial Option C patch reported "helper added" but a subsequent edit overwrote the file from disk and the helper disappeared. Caught only via `curl` returning 500 with `ReferenceError`. Lesson: when patch scripts touch the same file in sequence, the LAST patch's understanding of the file determines what survives. Going forward: re-read the file before EACH patch script writes — or use append-only operations for helper additions.
+- **My own placeholder text caused a fake bug diagnosis.** I sent a curl with `x-user-id: 2661d69e...` (literal three dots) and Prisma threw a UUID parse error. Spent diagnostic energy theorising it was an Option C side-effect when actually it was my malformed command. Reinforces Day 9/10 PASTE_X lesson — every command Claude provides MUST ship with real values, never placeholders.
+- **Apostrophe-in-single-quoted-JS-string trap, attempt 3 in 3 sessions.** Same mistake despite logging it twice. Going forward: any string with apostrophes uses double-quotes or backticks, period. No exceptions.
+- **Scope-creep at hour 6+ creates session-wide instability.** Day 11 evening session went from "60 min cleanup" to 11+ hours, shipped 14 items. The cumulative effect: regressions compounded across surfaces, each individually small but together producing a fragile system. Lesson: hard-lock scope at session start, additions require explicit re-scope check, sessions over 4 hours should pause for a verification pass before continuing.
+
+### Pre-existing issues still open (carried)
+- Prisma drift on Supabase extensions
+- `tsconfig.json moduleResolution: bundler` blocks `tsc --noEmit` as CI check
+- Prisma 5.22 → 7 upgrade available (defer)
+- `[Gate]` console.log in `app/_layout.tsx` (Phase 5)
+- Orphan onboarding files lifestyle/budget/training/facilities (Phase 5)
+- `react-native-sse` installed but unused
+- ADMIN_USER_IDS hardcoded — env var (v1.1)
+
+### Open follow-ups (next session)
+
+- **Multi-gym hero pattern**: AI sometimes recommends 3-4 gyms in flowing prose during a saveTrip turn instead of calling searchGyms + returning structured gymIds. System prompt tuning: when discussing >1 gym to a user, AI should call searchGyms first and put IDs in gymIds, not enumerate in prose.
+- **AI re-call on "show me them"**: When user says "let me see them" after a prior turn mentioned gyms in prose, AI doesn't re-call searchGyms to surface them as cards. System prompt should teach the AI to re-search when the user expresses interest in seeing options.
+- **Chat thread delete UX**: User can't clean up stale test threads. Cheap fix.
+- **Verification playbook ready for the weekend** (see VERIFICATION_PLAYBOOK.md).
+
+---
+
+## What's next
+
+### Founder weekend work (no Claude session)
+1. **Manual gym verification** — see VERIFICATION_PLAYBOOK.md in this repo
+2. Apple Developer Program signup ($99/year)
+3. Google Play Console signup ($25)
+
+### Next coding session (pick one)
+1. Multi-gym hero pattern + "show me them" AI behavior tuning
+2. Pre-TestFlight cleanup (remove [Gate] log, delete orphan onboarding files, single API_BASE env var, ToS/Privacy drafts, App Store/Play metadata)
+3. First `eas build --platform ios` + `eas build --platform android`
+
+**Target: dual-platform closed beta in testers' hands within 7-10 days from manual verification completion.**

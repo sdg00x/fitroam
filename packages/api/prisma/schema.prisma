@@ -6,13 +6,15 @@ generator client {
 datasource db {
   provider   = "postgresql"
   url        = env("DATABASE_URL")
-  extensions = [uuidOssp(map: "uuid-ossp"), postgis]
+  extensions = [uuidOssp(map: "uuid-ossp"), postgis, pgcrypto, pgStatStatements(map: "pg_stat_statements")]
 }
 
 model User {
   id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   clerkId   String    @unique @map("clerk_id")
   email     String    @unique
+  name      String?
+  phone     String?
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz
@@ -23,20 +25,26 @@ model User {
   trips        Trip[]
   gymAccess    GymAccess[]
 
+  chatThreads  ChatThread[]
   @@map("users")
+  bookingInterests BookingInterest[]
 }
 
 model UserProfile {
   id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId             String   @unique @map("user_id") @db.Uuid
-  trainingStyle      String   @map("training_style")
-  equipmentNeeds     String[] @map("equipment_needs")
-  budgetRange        String   @map("budget_range")
+  primaryActivity    String   @default("staying_in_shape") @map("primary_activity")
+  activities         String[] @default([])
+  facilityTypes      String[] @default([]) @map("facility_types")
+  lifestyle          String[] @default([])
+  priorities         String[] @default([])
+  monthlyBudget      String   @default("any_quality") @map("monthly_budget")
+  travelDailyBudget  String   @default("any_quality") @map("travel_daily_budget")
   maxDistanceMinutes Int      @default(20) @map("max_distance_minutes")
-  environmentPref    String   @default("both") @map("environment_pref")
-  stayLengthPref     String   @default("flexible") @map("stay_length_pref")
-  themePreference    String   @default("dark") @map("theme_preference")
   trainingPattern    String?  @map("training_pattern")
+  themePreference    String   @default("dark") @map("theme_preference")
+  onboarded          Boolean  @default(false)
+  citySlug           String?  @map("city_slug")
   updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -55,6 +63,12 @@ model Gym {
   equipmentTags String[] @default([]) @map("equipment_tags")
   photoUrls     String[]      @default([]) @map("photo_urls")
   websiteUrl    String?   @map("website_url")
+  citySlug      String?   @map("city_slug")
+  dayPass       Boolean   @default(false) @map("day_pass")
+  dayPassPence  Int?      @map("day_pass_pence")
+  dayPassUrl    String?   @map("day_pass_url")
+  verified      Boolean   @default(false)
+  verifiedAt    DateTime? @map("verified_at") @db.Timestamptz
   rating        Float?
   ratingCount   Int?     @map("rating_count")
   lastFetchedAt DateTime @default(now()) @map("last_fetched_at") @db.Timestamptz
@@ -66,6 +80,7 @@ model Gym {
   gymAccess    GymAccess[]
 
   @@map("gyms")
+  bookingInterests BookingInterest[]
 }
 
 model PriceReport {
@@ -109,7 +124,8 @@ model GymAccess {
   expectedEndDate DateTime @map("expected_end_date") @db.Date
   reminderSentAt DateTime? @map("reminder_sent_at") @db.Timestamptz
   cancelledAt    DateTime? @map("cancelled_at") @db.Timestamptz
-  status         String    @default("active")
+  status         String    @default("pending")
+  confirmedAt    DateTime? @map("confirmed_at") @db.Timestamptz
   notes          String?
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
 
@@ -188,6 +204,7 @@ model Trip {
 
   @@index([userId])
   @@map("trips")
+  bookingInterests BookingInterest[]
 }
 
 model TripLeg {
@@ -241,3 +258,59 @@ model TripRoute {
   @@map("trip_routes")
 }
 
+
+model ChatThread {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  title           String?
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  lastMessageAt   DateTime @default(now()) @map("last_message_at") @db.Timestamptz
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages ChatMessage[]
+
+  @@index([userId])
+  @@index([lastMessageAt(sort: Desc)])
+  @@map("chat_threads")
+}
+
+model ChatMessage {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  threadId  String   @map("thread_id") @db.Uuid
+  role      String   // 'user' | 'assistant'
+  content   String
+  gymIds    Json?    @map("gym_ids")
+  googlePlaceIds String[] @default([]) @map("google_place_ids")
+  toolResults Json?    @map("tool_results")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  thread ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId])
+  @@index([threadId, createdAt])
+  @@map("chat_messages")
+}
+
+model BookingInterest {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  tripId          String?  @map("trip_id") @db.Uuid
+  gymId           String?  @map("gym_id") @db.Uuid
+  gymPlaceId       String?  @map("gym_place_id")
+  gymNameSnapshot  String?  @map("gym_name_snapshot")
+  gymAddressSnapshot String? @map("gym_address_snapshot")
+  email           String
+  pricePence      Int      @map("price_shown_pence")
+  source          String   @default("gym_card")
+  status          String   @default("waitlisted")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trip Trip? @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  gym  Gym?  @relation(fields: [gymId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([gymId])
+  @@index([createdAt(sort: Desc)])
+  @@map("booking_interest")
+}

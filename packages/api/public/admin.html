@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FitRoam · Booking Interest Admin</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --surface: #1a1d24;
+    --border: #2a2e38;
+    --text: #e8e9ed;
+    --muted: #8a8f9c;
+    --accent: #c8ff57;
+    --accent-text: #0f1115;
+    --danger: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; font-size: 14px; }
+  h1 { margin: 0 0 4px; font-size: 22px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
+  .auth { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 24px; }
+  .auth label { display: block; margin-bottom: 6px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .auth input { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text); font-family: inherit; font-size: 13px; width: 380px; max-width: 100%; }
+  .auth button { background: var(--accent); color: var(--accent-text); border: 0; border-radius: 8px; padding: 10px 16px; font-weight: 600; cursor: pointer; margin-left: 8px; }
+  .auth button:hover { opacity: 0.9; }
+  .stats { display: flex; gap: 12px; margin-bottom: 16px; }
+  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; }
+  .stat .n { font-size: 22px; font-weight: 700; }
+  .stat .l { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .row { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 12px; display: grid; grid-template-columns: 1.4fr 1.4fr 1fr 1.2fr; gap: 16px; align-items: start; }
+  .row .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+  .row .val { font-size: 13px; line-height: 1.4; }
+  .row a { color: var(--accent); text-decoration: none; word-break: break-all; }
+  .row a:hover { text-decoration: underline; }
+  .source-badge { display: inline-block; padding: 2px 6px; border-radius: 4px; background: var(--border); color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; margin-right: 6px; }
+  .status-controls { display: flex; flex-direction: column; gap: 6px; }
+  .status-btn { background: transparent; color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font-family: inherit; font-size: 12px; cursor: pointer; text-align: left; }
+  .status-btn:hover { background: var(--border); }
+  .status-btn.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+  .status-btn.active:hover { opacity: 0.9; background: var(--accent); }
+  .meta { color: var(--muted); font-size: 11px; }
+  .error { color: var(--danger); padding: 12px; background: var(--surface); border: 1px solid var(--danger); border-radius: 8px; }
+  .empty { color: var(--muted); padding: 32px; text-align: center; background: var(--surface); border-radius: 12px; border: 1px solid var(--border); }
+  .copy { background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; font-size: 10px; cursor: pointer; margin-left: 6px; }
+  .copy:hover { color: var(--text); }
+</style>
+</head>
+<body>
+  <h1>FitRoam · Booking Interest</h1>
+  <div class="sub">Fake-door waitlist captures. Tap a status button to update.</div>
+
+  <div class="auth">
+    <label>X-User-ID (admin UUID)</label>
+    <input id="userId" placeholder="paste your user id" />
+    <button onclick="load()">Load</button>
+    <span id="authStatus" style="margin-left: 12px; color: var(--muted);"></span>
+  </div>
+
+  <div id="content"></div>
+
+<script>
+  const STATUSES = ['waitlisted', 'contacted', 'fulfilled', 'declined'];
+  let cachedRows = [];
+
+  // Persist user id between reloads
+  const saved = localStorage.getItem('fitroam_admin_uid');
+  if (saved) document.getElementById('userId').value = saved;
+
+  async function load() {
+    const uid = document.getElementById('userId').value.trim();
+    if (!uid) return;
+    localStorage.setItem('fitroam_admin_uid', uid);
+    const statusEl = document.getElementById('authStatus');
+    statusEl.textContent = 'Loading...';
+    try {
+      const res = await fetch('/api/booking-interest/admin', { headers: { 'x-user-id': uid } });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        statusEl.textContent = `Error ${res.status}: ${body.error || res.statusText}`;
+        statusEl.style.color = 'var(--danger)';
+        return;
+      }
+      const data = await res.json();
+      cachedRows = data.rows || [];
+      statusEl.style.color = 'var(--muted)';
+      statusEl.textContent = `Loaded ${data.count} rows`;
+      render();
+    } catch (e) {
+      statusEl.textContent = `Network error: ${e.message}`;
+      statusEl.style.color = 'var(--danger)';
+    }
+  }
+
+  async function updateStatus(id, status) {
+    const uid = document.getElementById('userId').value.trim();
+    try {
+      const res = await fetch(`/api/booking-interest/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': uid },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        alert(`Failed: ${body.error || res.statusText}`);
+        return;
+      }
+      // Optimistic update
+      const row = cachedRows.find((r) => r.id === id);
+      if (row) row.status = status;
+      render();
+    } catch (e) {
+      alert(`Network error: ${e.message}`);
+    }
+  }
+
+  function copyToClip(text, btn) {
+    navigator.clipboard.writeText(text).then(() => {
+      const old = btn.textContent;
+      btn.textContent = 'copied';
+      setTimeout(() => { btn.textContent = old; }, 1200);
+    });
+  }
+
+  function fmtTime(iso) {
+    const d = new Date(iso);
+    const now = Date.now();
+    const diffMs = now - d.getTime();
+    const min = Math.floor(diffMs / 60000);
+    if (min < 1) return 'just now';
+    if (min < 60) return `${min}m ago`;
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return `${hr}h ago`;
+    const day = Math.floor(hr / 24);
+    if (day < 30) return `${day}d ago`;
+    return d.toLocaleDateString();
+  }
+
+  function fmtPence(p) {
+    return p == null ? '—' : `£${(p / 100).toFixed(2)}`;
+  }
+
+  function render() {
+    const content = document.getElementById('content');
+    if (!cachedRows.length) {
+      content.innerHTML = '<div class="empty">No booking interest yet. As beta testers tap "Let us handle it", rows will appear here.</div>';
+      return;
+    }
+
+    // Stats
+    const byStatus = STATUSES.reduce((acc, s) => { acc[s] = cachedRows.filter((r) => r.status === s).length; return acc; }, {});
+    const statsHtml = `
+      <div class="stats">
+        ${STATUSES.map(s => `<div class="stat"><div class="n">${byStatus[s]}</div><div class="l">${s}</div></div>`).join('')}
+        <div class="stat"><div class="n">${cachedRows.length}</div><div class="l">total</div></div>
+      </div>
+    `;
+
+    const rowsHtml = cachedRows.map((r) => `
+      <div class="row">
+        <div>
+          <div class="label">User</div>
+          <div class="val"><strong>${r.user?.name ?? '(no name)'}</strong></div>
+          <div class="val"><a href="mailto:${r.user?.email}">${r.user?.email}</a> <button class="copy" onclick="copyToClip('${r.user?.email}', this)">copy</button></div>
+          ${r.user?.phone ? `<div class="val"><a href="tel:${r.user.phone}">${r.user.phone}</a> <button class="copy" onclick="copyToClip('${r.user.phone}', this)">copy</button></div>` : ''}
+          <div class="meta">captured: ${r.capturedEmail}</div>
+          <div class="meta">${fmtTime(r.createdAt)}</div>
+        </div>
+        <div>
+          <div class="label">Gym</div>
+          <div class="val"><strong>${r.gym?.name ?? '?'}</strong></div>
+          <div class="val meta">${r.gym?.citySlug ?? ''}</div>
+          ${r.gym?.dayPassUrl ? `<div class="val"><a href="${r.gym.dayPassUrl}" target="_blank">Day pass page →</a> <button class="copy" onclick="copyToClip('${r.gym.dayPassUrl}', this)">copy</button></div>` : '<div class="val meta">no day-pass URL</div>'}
+          <div class="meta">price: ${fmtPence(r.gym?.dayPassPence)}</div>
+          ${r.trip ? `<div class="meta">trip: ${r.trip.name}</div>` : ''}
+        </div>
+        <div>
+          <div class="label">Source / Shown</div>
+          <div class="val"><span class="source-badge">${r.source}</span></div>
+          <div class="val meta">shown: ${fmtPence(r.pricePence)}</div>
+        </div>
+        <div>
+          <div class="label">Status</div>
+          <div class="status-controls">
+            ${STATUSES.map(s => `<button class="status-btn ${r.status === s ? 'active' : ''}" onclick="updateStatus('${r.id}', '${s}')">${s}</button>`).join('')}
+          </div>
+        </div>
+      </div>
+    `).join('');
+
+    content.innerHTML = statsHtml + rowsHtml;
+  }
+
+  // Auto-load disabled to prevent admin tab from creating Prisma pool contention
+  // during phone testing. Tap Load to fetch.
+</script>
+</body>
+</html>
