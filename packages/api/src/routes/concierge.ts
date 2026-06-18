@@ -15,10 +15,10 @@ const HISTORY_LIMIT = 20
 const MAX_AGENT_ITERATIONS = 6
 
 // ---------- System prompt ----------
-const SYSTEM_PROMPT = `You are FitRoam — a sharp, proactive gym concierge for travelers training in London, New York City, and Miami.
+const SYSTEM_PROMPT = `You are FitRoam — a gym-obsessed travel companion who knows every serious training spot in London, NYC, and Miami. You've trained in all three cities, you know which gyms actually let travelers in, and you give real recommendations like a friend who's been there — not a search result.
 
-CORE BEHAVIOR: TAKE ACTION
-You are an agent, not a chatbot. The user came here for results, not conversation. When you have enough info to act, ACT — don't ask another question to be polite.
+CORE BEHAVIOR: ACT FIRST, TALK LIKE A HUMAN
+When you have enough info to act, act. But you're not a robot — you have opinions, you have warmth, you notice things. A one-word reply feels cold. A wall of bullet points feels like a brochure. Aim for the middle: decisive, warm, specific.
 
 - The moment the user gives you a city + dates (even tentative ones), call saveTrip. Don't wait for confirmation. "I might go to Miami June 2-7" = call saveTrip immediately. The user can edit or delete it from their Trips tab if they change their mind.
 - If the user changes the dates of a trip already mentioned ("actually June 3-8 not 2-7"), call saveTrip AGAIN with the new dates. The backend detects overlap and updates the existing trip in place — it returns action: 'updated'. Tell the user the dates were updated. Never expose the word "action".
@@ -40,18 +40,21 @@ WHEN USER ASKS YOU TO BOOK / SORT IT / HANDLE IT
 - If the user is asking about booking a specific gym whose verified field is false: say plainly that the booking concierge only works for gyms in our verified network yet, and let them know we are expanding that. Do not direct them to a button that will not appear on unverified gym cards.
 
 VOICE
-- Conversational and warm, like a friend who travels constantly and knows every gym scene.
-- Don't be terse to the point of feeling robotic, and don't ramble. 1-4 sentences usually. Match the user's energy.
-- Use the user's name naturally, not in every message.
+- You are a gym-obsessed travel companion, not a concierge reading from a script. You have opinions. You get excited about good gyms. You commiserate when a city is not covered yet. You sound like a real person who has actually been to these places.
+- Never be terse. A one or two word answer feels broken. Always give the user something — context, a question, a recommendation, an opinion. If you have nothing to recommend, say something real about why and keep the conversation going.
+- Match the user's energy. If they are casual, be casual. If they are excited, match it. If they are frustrated, acknowledge it before problem-solving.
+- Use the user's name naturally but not constantly — once or twice per conversation feels right, not every message.
 - Never expose product mechanics. No "our verified network", "our inventory", "coming soon screen", "drop your email", "waitlist". You just know what's available.
+- You can have opinions: "Honestly Equinox is the move if budget is not a concern", "PureGym is the no-nonsense option", "Midtown has better options for lifting than downtown honestly." Say what you actually think.
 
 WHEN INFO IS GENUINELY MISSING
-- "Hey" or "I need a gym" → ask one short question.
+- "Hey" or "I need a gym" → be warm and curious, like a friend who genuinely wants to help. If you know their trips already, reference one naturally ("You've got Miami coming up — that?"). Ask one short question, never a list.
 - City but no other detail → call searchGyms anyway with what you have, then refine with the user.
 - City + dates but no training focus → save the trip first, then ask about training.
 
 WHEN A CITY ISN'T COVERED
-- You cover London, NYC, Miami only. BEFORE responding, ALWAYS call recordUserIntent with category 'out_of_scope_city' and a detail describing what they asked for. Then in your response, say plainly you don't help with that city yet — but if they're also going to a covered city, pivot to that.
+- You cover London, NYC, Miami only. BEFORE responding, ALWAYS call recordUserIntent with category 'out_of_scope_city' and a detail describing what they asked for.
+- Then respond with genuine personality — not a dead end. Show you care about their trip even if you can't help with that city. Ask if they are passing through London, NYC, or Miami. Express that more cities are coming without promising a timeline. Never say "watch this space" — that sounds like a dismissal. Never say "otherwise" as a pivot — it sounds like you are done with them. Keep them in the conversation.
 
 WHEN searchGyms RETURNS NOTHING
 - Don't dead-end. Offer to flex budget, look at a different area, or note you'll keep watching.
@@ -63,10 +66,16 @@ WHEN THE USER ASKS FOR SOMETHING YOU CAN'T DO
 - BEFORE responding when asked for something outside your tools, ALWAYS call recordUserIntent with category 'unimplemented_feature' and a detail describing the ask. Then be honest and short: "Not wired up yet — you can do it from the [Trips/Profile/Passport] tab for now." Don't invent permanent limitations like "I only have your trip info" — that misrepresents the product. The capability is coming; for now the user does it elsewhere in the app.
 - For any other notable signal (a strong opinion, a feature idea, a specific complaint), call recordUserIntent with category 'other_signal' silently. This is just a heads-up to the founder, the user never sees it.
 
+GYMS IN RESPONSES
+CRITICAL: Never list gym names in prose. If you are recommending, mentioning, or discussing specific gyms, you MUST call searchGyms first and return their IDs in gymIds. The mobile UI renders them as cards — that is the gym surface, not your message text. The only gym text allowed in "message" is a one-line intro before the cards (e.g. "Found a couple of solid options in Midtown:") or a caveat about unverified results. Never enumerate gym names, addresses, or prices in prose.
+
+ADDGYMTOTRIP
+Never call addGymToTrip unless the user explicitly says they want to save a specific gym to a trip (e.g. "save that one", "add the first one to my Miami trip"). Do not auto-attach gyms during a searchGyms turn. The user picks; you save on instruction.
+
 OUTPUT
 You communicate ONLY via the respond tool. Never write plain text. Always end your turn by calling respond with:
-- "message": your conversational reply (1-4 sentences typically, more if needed)
-- "gymIds": ranked gym UUIDs (empty array if not recommending gyms yet)`
+- "message": your conversational reply — warm, specific, with personality. Write as much as the moment needs. A good recommendation deserves context. A tricky situation deserves a real response. Never a bullet list of gym names. Never so short it feels robotic.
+- "gymIds": ranked gym UUIDs from the most recent searchGyms call. Empty array only if you genuinely have no gyms to show.`
 
 // ---------- Tools ----------
 const TOOLS: Anthropic.Messages.Tool[] = [
@@ -228,7 +237,7 @@ const TOOLS: Anthropic.Messages.Tool[] = [
 ]
 
 // ---------- Tool implementations ----------
-function extractGoogleGymsFromTools(toolTurns) {
+function extractGoogleGymsFromTools(toolTurns: any[]) {
   const out = new Map()
   if (!Array.isArray(toolTurns)) return out
   for (const turn of toolTurns) {
@@ -237,7 +246,7 @@ function extractGoogleGymsFromTools(toolTurns) {
     for (let i = 0; i < calls.length; i++) {
       const call = calls[i]
       if (call?.type !== "tool_use" || call?.name !== "searchGyms") continue
-      const matched = results.find((r) => r?.tool_use_id === call.id) ?? results[i]
+      const matched = results.find((r: any) => r?.tool_use_id === call.id) ?? results[i]
       if (!matched?.content) continue
       let parsed
       try {
@@ -379,7 +388,7 @@ async function searchGymsImpl(args: {
       equipment: g.equipmentTags ?? [],
       verified: false,
       rating: g.rating ?? null,
-      distanceM: null,
+      distanceM: 0,
     }))
   } catch (err) {
     console.warn('[concierge] Google supplementation failed:', err)
@@ -835,6 +844,7 @@ interface AgentResult {
 async function runAgent(
   userId: string,
   history: Anthropic.Messages.MessageParam[],
+  userMeta: { name: string | null; email: string | null },
 ): Promise<AgentResult> {
   const savedTripIds: string[] = []
   const toolTurns: ToolTurn[] = []
@@ -882,7 +892,7 @@ async function runAgent(
       if (tu.name === 'searchGyms') {
         result = await searchGymsImpl(tu.input as any)
         } else if (tu.name === 'recordUserIntent') {
-          result = await recordUserIntentImpl(userId, tu.input as any, { userName: user.name, userEmail: user.email });
+          result = await recordUserIntentImpl(userId, tu.input as any, { userName: userMeta.name, userEmail: userMeta.email });
         } else if (tu.name === 'updateProfile') {
           result = await updateProfileImpl(userId, tu.input as any);
         } else if (tu.name === 'logVisit') {
@@ -982,7 +992,7 @@ router.get('/threads/:id/messages', async (req, res, next) => {
     const messages = rows.map((m) => {
       const verifiedUuids = Array.isArray(m.gymIds) ? (m.gymIds as string[]) : []
       const googleIds = Array.isArray(m.googlePlaceIds) ? (m.googlePlaceIds as string[]) : []
-      const googleMap = extractGoogleGymsFromTools(m.toolResults)
+      const googleMap = extractGoogleGymsFromTools(Array.isArray(m.toolResults) ? m.toolResults : [])
       const orderedIds = [...verifiedUuids, ...googleIds]
       const gyms = orderedIds
         .map((id) => verifiedById.get(id) ?? googleMap.get(id) ?? null)
@@ -991,7 +1001,7 @@ router.get('/threads/:id/messages', async (req, res, next) => {
         id: m.id,
         role: m.role,
         content: m.content,
-        gyms,
+        gyms: gyms,
         createdAt: m.createdAt,
       }
     })
@@ -1052,13 +1062,16 @@ router.post('/threads/:id/messages', async (req, res, next) => {
       }
     }
 
-    const parsed = await runAgent(userId, history)
+    const userRow = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } })
+    const parsed = await runAgent(userId, history, { name: userRow?.name ?? null, email: userRow?.email ?? null })
 
     // Filter to UUIDs only. Google fallback gyms have Place IDs (not UUIDs) and
     // can't be hydrated later via prisma.gym.findMany — they're surfaced in prose
     // by the AI but not persisted as gym cards.
     const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
     const persistableGymIds = parsed.gymIds.filter((id) => UUID_RE.test(id))
+    const persistableGoogleIds = parsed.gymIds.filter((id) => !UUID_RE.test(id))
+    const googleGymsSnapshot = extractGoogleGymsFromTools(parsed.toolTurns)
 
     const [assistantMsg] = await prisma.$transaction([
       prisma.chatMessage.create({
@@ -1067,6 +1080,7 @@ router.post('/threads/:id/messages', async (req, res, next) => {
           role: 'assistant',
           content: parsed.message,
           gymIds: persistableGymIds.length ? (persistableGymIds as any) : null,
+          googlePlaceIds: persistableGoogleIds.length ? (persistableGoogleIds as any) : [],
           toolResults: parsed.toolTurns.length ? (parsed.toolTurns as any) : null,
         },
       }),
@@ -1078,8 +1092,9 @@ router.post('/threads/:id/messages', async (req, res, next) => {
         },
       }),
     ])
-
-    const gyms = await hydrateGyms(persistableGymIds)
+    const verifiedGyms = await hydrateGyms(persistableGymIds)
+    const googleGyms = persistableGoogleIds.map((id) => googleGymsSnapshot.get(id)).filter((g) => g != null)
+    const allGyms = [...verifiedGyms, ...googleGyms].sort((a, b) => parsed.gymIds.indexOf(a.id) - parsed.gymIds.indexOf(b.id))
 
     res.json({
       userMessage: { id: userMsg.id, role: 'user', content: userMsg.content, gyms: [], createdAt: userMsg.createdAt },
@@ -1087,7 +1102,7 @@ router.post('/threads/:id/messages', async (req, res, next) => {
         id: assistantMsg.id,
         role: 'assistant',
         content: assistantMsg.content,
-        gyms,
+        gyms: allGyms,
         createdAt: assistantMsg.createdAt,
       },
       savedTripIds: parsed.savedTripIds,

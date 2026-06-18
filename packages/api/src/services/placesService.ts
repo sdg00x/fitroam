@@ -179,7 +179,7 @@ async function searchText(
     return []
   }
 
-  const data = await response.json()
+  const data = await response.json() as any
   return data.places ?? []
 }
 
@@ -237,9 +237,8 @@ export async function fetchPlaceDetails(
     throw new Error(`Place details fetch failed for ${placeId}`)
   }
 
-  return response.json()
+  return response.json() as Promise<PlaceResult>
 }
-
 // ─── Infer equipment tags from gym name and types ─────────────────────────────
 
 function inferEquipmentTags(place: PlaceResult): string[] {
