@@ -380,7 +380,7 @@ async function getCachedGyms(
 
   if (gyms.length === 0) return []
 
-  return gyms.map(gym => {
+  return gyms.map((gym: any) => {
   const latestPrice     = gym.priceReports[0]
   const distanceKm      = haversineKm(lat, lng, gym.lat, gym.lng)
   const distanceMinutes = Math.round(distanceKm / 0.08)

@@ -47,7 +47,7 @@ router.get('/all', async (req, res, next) => {
     })
 
     // Shape for mobile consumption
-    const visits = rows.map(r => ({
+    const visits = rows.map((r: any) => ({
       id:          r.id,
       gymId:       r.gymId,
       gymName:     r.gym.name,
