@@ -353,6 +353,8 @@ async function searchGymsImpl(args: {
     equipment: g.equipment_tags ?? [],
     verified: g.verified,
     rating: g.rating,
+    ratingCount: g.rating_count ?? null,
+    photoUrls: g.photo_urls ?? [],
     distanceM: Math.round(g.distance_m),
   }))
 
@@ -796,7 +798,7 @@ async function hydrateGyms(gymIds: string[]) {
     select: {
       id: true, name: true, address: true,
       dayPassPence: true, dayPassUrl: true, equipmentTags: true,
-      photoUrls: true, verified: true, rating: true,
+      photoUrls: true, verified: true, rating: true, ratingCount: true, dayPassUrl: true,
     },
   })
   const orderMap = new Map(gymIds.map((id, i) => [id, i]))
