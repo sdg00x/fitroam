@@ -41,7 +41,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       res.status(502).json({ error: 'Weather API error' })
       return
     }
-    const w = await r.json()
+    const w = await r.json() as any
 
     const result = {
       tempC:       Math.round(w.main?.temp ?? 0),

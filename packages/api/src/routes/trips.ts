@@ -188,8 +188,6 @@ router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => 
         city:     string
         citySlug: string
         country?: string
-        placeId?:          string
-        formattedAddress?: string
         lat:      number
         lng:      number
         arriveOn: string

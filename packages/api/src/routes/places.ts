@@ -39,7 +39,7 @@ router.get('/autocomplete', async (req: Request, res: Response, next: NextFuncti
       return
     }
 
-    const data = await r.json()
+    const data = await r.json() as any
     const predictions = (data.suggestions ?? []).map((s: any) => ({
       placeId:   s.placePrediction?.placeId,
       mainText:  s.placePrediction?.structuredFormat?.mainText?.text,
@@ -74,7 +74,7 @@ router.get('/details/:placeId', async (req: Request, res: Response, next: NextFu
       return
     }
 
-    const data = await r.json()
+    const data = await r.json() as any
 
     let country: string | undefined
     let city:    string | undefined

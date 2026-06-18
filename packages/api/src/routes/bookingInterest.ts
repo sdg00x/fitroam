@@ -166,7 +166,7 @@ router.get('/', async (req, res, next) => {
       interests: rows.map((r) => ({
         id: r.id,
         gymId: r.gymId,
-        gymName: r.gym.name,
+        gymName: r.gym?.name ?? null,
         tripId: r.tripId,
         pricePence: r.pricePence,
         source: r.source,

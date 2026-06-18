@@ -237,7 +237,7 @@ const TOOLS: Anthropic.Messages.Tool[] = [
 ]
 
 // ---------- Tool implementations ----------
-function extractGoogleGymsFromTools(toolTurns) {
+function extractGoogleGymsFromTools(toolTurns: any[]) {
   const out = new Map()
   if (!Array.isArray(toolTurns)) return out
   for (const turn of toolTurns) {
@@ -246,7 +246,7 @@ function extractGoogleGymsFromTools(toolTurns) {
     for (let i = 0; i < calls.length; i++) {
       const call = calls[i]
       if (call?.type !== "tool_use" || call?.name !== "searchGyms") continue
-      const matched = results.find((r) => r?.tool_use_id === call.id) ?? results[i]
+      const matched = results.find((r: any) => r?.tool_use_id === call.id) ?? results[i]
       if (!matched?.content) continue
       let parsed
       try {
@@ -388,7 +388,7 @@ async function searchGymsImpl(args: {
       equipment: g.equipmentTags ?? [],
       verified: false,
       rating: g.rating ?? null,
-      distanceM: null,
+      distanceM: 0,
     }))
   } catch (err) {
     console.warn('[concierge] Google supplementation failed:', err)
@@ -992,7 +992,7 @@ router.get('/threads/:id/messages', async (req, res, next) => {
     const messages = rows.map((m) => {
       const verifiedUuids = Array.isArray(m.gymIds) ? (m.gymIds as string[]) : []
       const googleIds = Array.isArray(m.googlePlaceIds) ? (m.googlePlaceIds as string[]) : []
-      const googleMap = extractGoogleGymsFromTools(m.toolResults)
+      const googleMap = extractGoogleGymsFromTools(Array.isArray(m.toolResults) ? m.toolResults : [])
       const orderedIds = [...verifiedUuids, ...googleIds]
       const gyms = orderedIds
         .map((id) => verifiedById.get(id) ?? googleMap.get(id) ?? null)
