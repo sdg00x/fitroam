@@ -342,7 +342,7 @@ async function searchGymsImpl(args: {
   `
 
   // Map DB rows to the response shape used by the AI.
-  const verifiedGyms = rows.map((g) => ({
+  const verifiedGyms = rows.map((g: any) => ({
     id: g.id,
     name: g.name,
     address: g.address,
@@ -374,7 +374,7 @@ async function searchGymsImpl(args: {
   try {
     const raw = await fetchNearbyGyms(center.lat, center.lng, RADIUS_METERS)
     // Deduplicate against verified results by name (Google may return the same gym).
-    const verifiedNames = new Set(verifiedGyms.map((g) => g.name.toLowerCase()))
+    const verifiedNames = new Set(verifiedGyms.map((g: any) => g.name.toLowerCase()))
     const filtered = raw.filter((g: any) => !verifiedNames.has((g.name ?? '').toLowerCase()))
     const top = filtered.slice(0, 10 - verifiedGyms.length)
     googleGyms = top.map((g: any) => ({
@@ -457,7 +457,7 @@ async function saveTripImpl(
     if (oldLeg) {
       const previousDates = formatRangeLocal(oldLeg.arriveOn, oldLeg.departOn)
       const newName = `${centroid.city}, ${formatRangeLocal(start, end)}`
-      const updated = await prisma.$transaction(async (tx) => {
+      const updated = await prisma.$transaction(async (tx: any) => {
         await tx.tripLeg.update({
           where: { id: oldLeg.id },
           data: { arriveOn: start, departOn: end },
@@ -516,11 +516,11 @@ async function listTripsImpl(userId: string) {
     orderBy: { createdAt: 'desc' },
     include: { legs: { orderBy: { legOrder: 'asc' } } },
   })
-  return trips.map((t) => ({
+  return trips.map((t: any) => ({
     id: t.id,
     name: t.name,
     reason: t.reason,
-    legs: t.legs.map((l) => ({
+    legs: t.legs.map((l: any) => ({
       city: l.city,
       citySlug: l.citySlug,
       country: l.country,
@@ -537,7 +537,7 @@ async function listVisitsImpl(userId: string) {
     orderBy: { activatedAt: 'desc' },
     take: 50,
   })
-  return rows.map((r) => ({
+  return rows.map((r: any) => ({
     id: r.id,
     gymId: r.gymId,
     gymName: r.gym.name,
@@ -771,7 +771,7 @@ async function loadUserContext(userId: string): Promise<string> {
   const todayStr = new Date().toISOString().split('T')[0]
   const tripsLine = recentTrips.length
     ? recentTrips
-        .map((t) => {
+        .map((t: any) => {
           const leg = t.legs[0]
           if (!leg) return t.name
           const a = leg.arriveOn.toISOString().split('T')[0]
@@ -800,7 +800,7 @@ async function hydrateGyms(gymIds: string[]) {
     },
   })
   const orderMap = new Map(gymIds.map((id, i) => [id, i]))
-  gyms.sort((a, b) => (orderMap.get(a.id) ?? 99) - (orderMap.get(b.id) ?? 99))
+  gyms.sort((a: any, b: any) => (orderMap.get(a.id) ?? 99) - (orderMap.get(b.id) ?? 99))
   return gyms
 }
 
@@ -988,8 +988,8 @@ router.get('/threads/:id/messages', async (req, res, next) => {
       }
     }
     const hydrated = await hydrateGyms([...allUuids])
-    const verifiedById = new Map(hydrated.map((g) => [g.id, g]))
-    const messages = rows.map((m) => {
+    const verifiedById = new Map(hydrated.map((g: any) => [g.id, g]))
+    const messages = rows.map((m: any) => {
       const verifiedUuids = Array.isArray(m.gymIds) ? (m.gymIds as string[]) : []
       const googleIds = Array.isArray(m.googlePlaceIds) ? (m.googlePlaceIds as string[]) : []
       const googleMap = extractGoogleGymsFromTools(Array.isArray(m.toolResults) ? m.toolResults : [])
@@ -1093,8 +1093,8 @@ router.post('/threads/:id/messages', async (req, res, next) => {
       }),
     ])
     const verifiedGyms = await hydrateGyms(persistableGymIds)
-    const googleGyms = persistableGoogleIds.map((id) => googleGymsSnapshot.get(id)).filter((g) => g != null)
-    const allGyms = [...verifiedGyms, ...googleGyms].sort((a, b) => parsed.gymIds.indexOf(a.id) - parsed.gymIds.indexOf(b.id))
+    const googleGyms = persistableGoogleIds.map((id) => googleGymsSnapshot.get(id)).filter((g: any) => g != null)
+    const allGyms = [...verifiedGyms, ...googleGyms].sort((a: any, b: any) => parsed.gymIds.indexOf(a.id) - parsed.gymIds.indexOf(b.id))
 
     res.json({
       userMessage: { id: userMsg.id, role: 'user', content: userMsg.content, gyms: [], createdAt: userMsg.createdAt },
