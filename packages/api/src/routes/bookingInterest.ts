@@ -163,7 +163,7 @@ router.get('/', async (req, res, next) => {
     })
 
     res.json({
-      interests: rows.map((r) => ({
+      interests: rows.map((r: any) => ({
         id: r.id,
         gymId: r.gymId,
         gymName: r.gym?.name ?? null,
@@ -205,7 +205,7 @@ router.get('/admin', async (req, res, next) => {
 
     res.json({
       count: rows.length,
-      rows: rows.map((r) => ({
+      rows: rows.map((r: any) => ({
         id: r.id,
         status: r.status,
         source: r.source,
